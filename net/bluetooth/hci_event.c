@@ -1218,6 +1218,9 @@ static int hci_outgoing_auth_needed(struct hci_dev *hdev,
 		return 0;
 
 	return 1;
+	if (!e)
+		return false;
+
 }
 
 static void hci_cs_remote_name_req(struct hci_dev *hdev, __u8 status)
