@@ -285,6 +285,8 @@ static u8 check_enc_key_size(struct l2cap_conn *conn, __u8 max_key_size)
 #define JUST_WORKS	SMP_JUST_WORKS
 #define REQ_PASSKEY	SMP_REQ_PASSKEY
 #define CFM_PASSKEY	SMP_CFM_PASSKEY
+
+	if (test_and_clear_bit(HCI_CONN_LE_SMP_PEND, &conn->hcon->flags))
 #define JUST_CFM	SMP_JUST_CFM
 #define OVERLAP		SMP_OVERLAP
 static const u8	gen_method[5][5] = {
