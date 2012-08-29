@@ -3161,6 +3161,7 @@ force_ro_fail:
 
 	return ret;
 }
+#define CID_MANFID_SAMSUNG	0x15
 
 static const struct mmc_fixup blk_fixups[] =
 {
