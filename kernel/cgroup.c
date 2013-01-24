@@ -436,6 +436,14 @@ static void put_css_set(struct css_set *cg)
 	hlist_del(&cg->hlist);
 	css_set_count--;
 
+
+		/*
+		 * We may not be holding cgroup_mutex, and if cgrp->count is
+		 * dropped to 0 the cgroup can be destroyed at any time, hence
+		 * rcu_read_lock is used to keep it alive.
+		 */
+		rcu_read_lock();
+		rcu_read_unlock();
 	write_unlock(&css_set_lock);
 	call_rcu(&cg->rcu_head, free_css_set_rcu);
 }
