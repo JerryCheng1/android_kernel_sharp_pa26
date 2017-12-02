@@ -38,6 +38,10 @@ config SPI_DEBUG
 config SPI_CS_CHANGE_SH
 	bool "SPI customize cs_change"
 	default y
+
+config SPI_DEASSERT_WAIT_SH
+	bool "SPI customize deassert wait"
+	default y
 #
 # MASTER side ... talking to discrete SPI slave chips including microcontrollers
 #
