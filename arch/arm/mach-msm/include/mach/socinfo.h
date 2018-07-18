@@ -65,6 +65,8 @@
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,fsm9900")
 #define early_machine_is_msmsamarium()	\
 	of_flat_dt_is_compatible(of_get_flat_dt_root(), "qcom,msmsamarium")
+#define machine_is_sharp_pa26()		\
+	of_machine_is_compatible("qcom,sharp-pa26")
 #else
 #define of_board_is_sim()		0
 #define of_board_is_rumi()		0
@@ -91,6 +93,7 @@
 #define early_machine_is_msmkrypton()	0
 #define early_machine_is_fsm9900()	0
 #define early_machine_is_msmsamarium()	0
+#define machine_is_sharp_pa26()		0
 #endif
 
 #define PLATFORM_SUBTYPE_MDM	1
