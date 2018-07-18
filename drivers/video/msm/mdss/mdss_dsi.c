@@ -26,6 +26,35 @@
 #include "mdss_panel.h"
 #include "mdss_dsi.h"
 #include "mdss_debug.h"
+#ifdef CONFIG_SHDISP /* CUST_ID_00001 */
+#include "mdss_shdisp.h"
+#endif /* CONFIG_SHLCDC_BOARD */
+
+#ifdef CONFIG_SHDISP /* CUST_ID_00012 (1HZ) */
+int mdss_dsi_state_reset(struct mdss_panel_data *pdata)
+{
+	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
+	u32 dsi_ctrl;
+
+	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
+			panel_data);
+	dsi_ctrl = MIPI_INP((ctrl_pdata->ctrl_base) + 0x0004);
+	dsi_ctrl &= ~0x01;
+	MIPI_OUTP((ctrl_pdata->ctrl_base) + 0x0004, dsi_ctrl);
+	wmb();
+	MIPI_OUTP((ctrl_pdata->ctrl_base) + 0x11c, 0x23f);
+	wmb();
+	MIPI_OUTP((ctrl_pdata->ctrl_base) + 0x118, 0x01);
+	wmb();
+	MIPI_OUTP((ctrl_pdata->ctrl_base) + 0x118, 0x00);
+	wmb();
+	MIPI_OUTP((ctrl_pdata->ctrl_base) + 0x11c, 0x23f);
+	dsi_ctrl |= 0x01;
+	MIPI_OUTP((ctrl_pdata->ctrl_base) + 0x0004, dsi_ctrl);
+	wmb();
+	return 0;
+}
+#endif /* CONFIG_SHDISP */
 
 static int mdss_dsi_regulator_init(struct platform_device *pdev)
 {
@@ -872,7 +901,42 @@ int mdss_dsi_cont_splash_on(struct mdss_panel_data *pdata)
 
 	mdss_dsi_sw_reset(pdata);
 	mdss_dsi_host_init(pdata);
+
+#ifdef CONFIG_SHDISP /* CUST_ID_00050 */
+	mdss_dsi_op_mode_config(DSI_CMD_MODE, pdata);
+
+/* JERRY_UPDATE
+commit: 5609c46267834f671540a57593ce8f7483b17595
+old: mdss_set_tx_power_mode()
+	if (ctrl_pdata->on_cmds.link_state == DSI_HS_MODE)
+		mdss_set_tx_power_mode(0, pdata);
+	ret = mdss_dsi_unblank(pdata);
+	if (ctrl_pdata->on_cmds.link_state == DSI_HS_MODE)
+		mdss_set_tx_power_mode(1, pdata);
+*/
+	if (ctrl_pdata->on_cmds.link_state == DSI_HS_MODE)
+		mdss_dsi_set_tx_power_mode(0, pdata);
+	ret = mdss_dsi_unblank(pdata);
+	if (ctrl_pdata->on_cmds.link_state == DSI_HS_MODE)
+		mdss_dsi_set_tx_power_mode(1, pdata);
+	if (ret) {
+		pr_err("%s: unblank failed\n", __func__);
+		return ret;
+	}
+
 	mdss_dsi_op_mode_config(mipi->mode, pdata);
+#else  /* CONFIG_SHDISP */
+	mdss_dsi_op_mode_config(mipi->mode, pdata);
+
+	if (ctrl_pdata->on_cmds.link_state == DSI_LP_MODE) {
+		ret = mdss_dsi_unblank(pdata);
+		if (ret) {
+			pr_err("%s: unblank failed\n", __func__);
+			return ret;
+		}
+	}
+
+#endif /* CONFIG_SHDISP */
 	pr_debug("%s-:End\n", __func__);
 	return ret;
 }
@@ -1042,15 +1106,46 @@ static int mdss_dsi_event_handler(struct mdss_panel_data *pdata,
 		break;
 	case MDSS_EVENT_PANEL_OFF:
 		ctrl_pdata->ctrl_state &= ~CTRL_STATE_MDP_ACTIVE;
+#ifdef CONFIG_SHDISP /* CUST_ID_00050 */
+		if (ctrl_pdata->off_cmds.link_state == DSI_LP_MODE) {
+			if (pdata->panel_info.mipi.mode == DSI_VIDEO_MODE) {
+				mdss_dsi_sw_reset(pdata);
+				mdss_dsi_host_init(pdata);
+			}
+			rc = mdss_dsi_blank(pdata);
+		}
+#else  /* CONFIG_SHDISP */
 		if (ctrl_pdata->off_cmds.link_state == DSI_LP_MODE)
 			rc = mdss_dsi_blank(pdata);
+#endif /* CONFIG_SHDISP */
 		rc = mdss_dsi_off(pdata);
 		break;
 	case MDSS_EVENT_CONT_SPLASH_FINISH:
+#ifdef CONFIG_SHDISP /* CUST_ID_00050 JERRY_UPDATE 2018 JULY */
+		if (ctrl_pdata->off_cmds.link_state == DSI_LP_MODE) {
+			if (pdata->panel_info.mipi.mode == DSI_VIDEO_MODE) {
+				mdss_dsi_sw_reset(pdata);
+				mdss_dsi_host_init(pdata);
+			}
+			rc = mdss_dsi_blank(pdata);
+		}
+#else  /* CONFIG_SHDISP */
 		if (ctrl_pdata->off_cmds.link_state == DSI_LP_MODE)
 			rc = mdss_dsi_blank(pdata);
+#endif /* CONFIG_SHDISP */		
 		ctrl_pdata->ctrl_state &= ~CTRL_STATE_MDP_ACTIVE;
+#ifdef CONFIG_SHDISP /* CUST_ID_00050 */
 		rc = mdss_dsi_cont_splash_on(pdata);
+#else  /* CONFIG_SHDISP */
+		if (ctrl_pdata->on_cmds.link_state == DSI_LP_MODE) {
+			rc = mdss_dsi_cont_splash_on(pdata);
+		} else {
+			pr_debug("%s:event=%d, Dsi On not called: ctrl_state: %d\n",
+				 __func__, event,
+				 ctrl_pdata->on_cmds.link_state);
+			rc = -EINVAL;
+		}
+#endif /* CONFIG_SHDISP */
 		break;
 	case MDSS_EVENT_PANEL_CLK_CTRL:
 		mdss_dsi_clk_req(ctrl_pdata, (int)arg);
@@ -1066,10 +1161,24 @@ static int mdss_dsi_event_handler(struct mdss_panel_data *pdata,
 		}
 		break;
 	case MDSS_EVENT_CONT_SPLASH_BEGIN:
+#ifdef CONFIG_SHDISP /* CUST_ID_00050 */
+		if (ctrl_pdata->off_cmds.link_state == DSI_HS_MODE &&
+						(int)arg == DSI_HS_MODE) {
+			/* Panel is Enabled in Bootloader */
+			rc = mdss_dsi_blank(pdata);
+		} else if (ctrl_pdata->off_cmds.link_state == DSI_LP_MODE &&
+						(int)arg == DSI_LP_MODE) {
+			/* Panel is Enabled in Bootloader */
+			mdss_dsi_sw_reset(pdata);
+			mdss_dsi_host_init(pdata);
+			rc = mdss_dsi_blank(pdata);
+		}
+#else  /* CONFIG_SHDISP */
 		if (ctrl_pdata->off_cmds.link_state == DSI_HS_MODE) {
 			/* Panel is Enabled in Bootloader */
 			rc = mdss_dsi_blank(pdata);
 		}
+#endif /* CONFIG_SHDISP */
 		break;
 	case MDSS_EVENT_ENABLE_PARTIAL_UPDATE:
 		rc = mdss_dsi_ctl_partial_update(pdata);
@@ -1502,7 +1611,11 @@ int dsi_panel_device_register(struct device_node *pan_node,
 		rc = gpio_tlmm_config(GPIO_CFG(
 				ctrl_pdata->disp_te_gpio, 1,
 				GPIO_CFG_INPUT,
+#ifdef CONFIG_SHDISP /* CUST_ID_00020 */ 
+				GPIO_CFG_NO_PULL,
+#else  /* CONFIG_SHDISP */ 
 				GPIO_CFG_PULL_DOWN,
+#endif /* CONFIG_SHDISP */ 
 				GPIO_CFG_2MA),
 				GPIO_CFG_ENABLE);
 
@@ -1591,6 +1704,9 @@ int dsi_panel_device_register(struct device_node *pan_node,
 		mdss_dsi_clk_ctrl(ctrl_pdata, DSI_ALL_CLKS, 1);
 		ctrl_pdata->ctrl_state |=
 			(CTRL_STATE_PANEL_INIT | CTRL_STATE_MDP_ACTIVE);
+#ifdef CONFIG_SHDISP /* CUST_ID_00001 */
+		mdss_shdisp_set_dsi_ctrl(ctrl_pdata);
+#endif /* CONFIG_SHLCDC_BOARD */
 	} else {
 		pinfo->panel_power_on = 0;
 	}
@@ -1604,6 +1720,10 @@ int dsi_panel_device_register(struct device_node *pan_node,
 	if (pinfo->pdest == DISPLAY_1) {
 		mdss_debug_register_base("dsi0",
 			ctrl_pdata->ctrl_base, ctrl_pdata->reg_size);
+#ifdef CONFIG_SHDISP /* CUST_ID_00061 */
+        mdss_debug_register_base("dsi_phy0",
+            ctrl_pdata->phy_io.base, ctrl_pdata->phy_io.len);
+#endif /* CONFIG_SHDISP */
 		ctrl_pdata->ndx = 0;
 	} else {
 		mdss_debug_register_base("dsi1",

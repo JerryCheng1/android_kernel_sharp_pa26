@@ -85,6 +85,15 @@ enum {
 	POWER_SUPPLY_SCOPE_DEVICE,
 };
 
+#ifdef CONFIG_BATTERY_SH
+enum {
+	POWER_SUPPLY_CABLE_STATUS_UNKNOWN = 0,
+	POWER_SUPPLY_CABLE_STATUS_USB,
+	POWER_SUPPLY_CABLE_STATUS_AC,
+	POWER_SUPPLY_CABLE_STATUS_CRADLE,
+};
+#endif /* CONFIG_BATTERY_SH */
+
 enum power_supply_property {
 	/* Properties of type `int' */
 	POWER_SUPPLY_PROP_STATUS = 0,
@@ -144,6 +153,9 @@ enum power_supply_property {
 	POWER_SUPPLY_PROP_MODEL_NAME,
 	POWER_SUPPLY_PROP_MANUFACTURER,
 	POWER_SUPPLY_PROP_SERIAL_NUMBER,
+#ifdef CONFIG_BATTERY_SH
+	POWER_SUPPLY_PROP_CABLE_STATUS,
+#endif /* CONFIG_BATTERY_SH */
 };
 
 enum power_supply_type {
@@ -156,6 +168,9 @@ enum power_supply_type {
 	POWER_SUPPLY_TYPE_USB_CDP,	/* Charging Downstream Port */
 	POWER_SUPPLY_TYPE_USB_ACA,	/* Accessory Charger Adapters */
 	POWER_SUPPLY_TYPE_BMS,		/* Battery Monitor System */
+#ifdef CONFIG_BATTERY_SH
+	POWER_SUPPLY_TYPE_WIRELESS,
+#endif /* CONFIG_BATTERY_SH */
 };
 
 union power_supply_propval {
@@ -238,6 +253,9 @@ extern int power_supply_set_health_state(struct power_supply *psy, int health);
 extern int power_supply_set_present(struct power_supply *psy, bool enable);
 extern int power_supply_set_scope(struct power_supply *psy, int scope);
 extern int power_supply_set_charge_type(struct power_supply *psy, int type);
+#ifdef CONFIG_BATTERY_SH
+extern int power_supply_set_cable_status(struct power_supply *psy, int cable);
+#endif /* CONFIG_BATTERY_SH */
 extern int power_supply_set_supply_type(struct power_supply *psy,
 					enum power_supply_type supply_type);
 extern int power_supply_is_system_supplied(void);
@@ -274,6 +292,11 @@ static inline int power_supply_set_scope(struct power_supply *psy,
 static inline int power_supply_set_charge_type(struct power_supply *psy,
 							int type)
 							{ return -ENOSYS; }
+#ifdef CONFIG_BATTERY_SH
+static inline int power_supply_set_cable_status(struct power_supply *psy,
+							int cable)
+							{ return -ENOSYS; }
+#endif /* CONFIG_BATTERY_SH */
 static inline int power_supply_set_supply_type(struct power_supply *psy,
 					enum power_supply_type supply_type)
 							{ return -ENOSYS; }

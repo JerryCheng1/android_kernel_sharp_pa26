@@ -412,6 +412,10 @@ struct input_keymap_entry {
 #define KEY_F23			193
 #define KEY_F24			194
 
+#ifdef CONFIG_TOUCHSCREEN_SHTPS
+#define KEY_SWEEPON		198
+#endif /* CONFIG_TOUCHSCREEN_SHTPS */
+
 #define KEY_PLAYCD		200
 #define KEY_PAUSECD		201
 #define KEY_PROG3		202
@@ -851,6 +855,11 @@ struct input_keymap_entry {
 #define SW_HPHR_OVERCURRENT    0x0f  /* set = over current on right hph */
 #define SW_UNSUPPORT_INSERT	0x10  /* set = unsupported device inserted */
 #define SW_MICROPHONE2_INSERT   0x11  /* set = inserted */
+#if defined( CONFIG_SH_AUDIO_DRIVER )
+#if defined( CONFIG_MACH_LYNX_DL60 ) || defined( CONFIG_MACH_LYNX_DL63 )
+#define SW_PIERCE       0x15
+#endif
+#endif
 #define SW_MAX			0x20
 #define SW_CNT			(SW_MAX+1)
 

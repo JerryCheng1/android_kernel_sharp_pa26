@@ -1,0 +1,17 @@
+#
+# Sharp Touchscreen configuration
+#
+
+if TOUCHSCREEN_SHTPS
+
+	config SHTPS_MXT_DEV
+		tristate "Atmel Device"
+		default n
+		depends on TOUCHSCREEN_SHTPS
+
+	config SHTPS_ATMEL_MXT336T
+		tristate "Atmel mXT336T"
+		default n
+		depends on SHTPS_MXT_DEV
+
+endif # TOUCHSCREEN_SHTPS

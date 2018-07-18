@@ -1,0 +1,425 @@
+/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/include/ "sharp-pa26-leds.dtsi"
+/include/ "sharp-pa26-camera-sensor.dtsi"
+/include/ "sharp-pa26-shdisp.dtsi"
+/include/ "sharp-pa26-sdcc.dtsi"
+
+/ {
+	aliases {
+		spi0 = "";
+		spi7 = "";
+		spi2 = &blsp2_spi;
+		spi10 = &blsp10_spi;
+		spi11 = &blsp11_spi;
+		serial1 = &blsp6_serial;
+/*		serial3 = &blsp8_serial;*/
+	};
+};
+
+&soc {
+
+	/*---------------------*/
+	/* BLSP1 QUP0(BLSP#1)  */
+	/*---------------------*/
+	blsp1_i2c: i2c@f9923000 {
+		status = "ok";
+	};
+
+	/*---------------------*/
+	/* BLSP1 QUP1(BLSP#2)  */
+	/*---------------------*/
+	blsp2_spi: spi@f9924000 {
+		status = "ok";
+		qcom,gpio-cs0  = <&msmgpio 6 0>;
+		shtps_rmi@0 {
+			status = "ok";
+			compatible = "sharp,shtps_rmi";
+			reg = <0>;
+			spi-max-frequency = <400000>;
+			interrupt-parent = <&msmgpio>;
+			interrupts = <61 0>;
+			spi-cpol;
+			spi-cpha;
+
+			/* user defined property */
+			shtps_rmi,rst_pin = <&pm8941_gpios 30 0>;
+			shtps_rmi,vdd_3_0V = <&pm8941_l15>;
+		};
+	};
+
+	/*---------------------*/
+	/* BLSP1 QUP2(BLSP#3)  */
+	/*---------------------*/
+	blsp3_i2c: i2c@f9925000 {
+		status = "ok";
+/* ---> VIBRATOR(LC898301) */
+		sh_vib_i2c@49 {
+			status = "ok";
+			compatible = "sharp,sh_vib_i2c";
+			reg = <0x49>;
+		};
+/* <--- VIBRATOR(LC898301) */
+	};
+
+	/*---------------------*/
+	/* BLSP1 QUP3(BLSP#4)  */
+	/*---------------------*/
+
+	/*---------------------*/
+	/* BLSP1 QUP4(BLSP#5)  */
+	/*---------------------*/
+	blsp5_i2c: i2c@f9927000 {
+		status = "ok";
+
+	felica_cen@57 {
+            status = "ok";
+        };
+
+	snfc_ant@40 {
+            status = "disabled";
+        };
+	};
+
+	/*---------------------*/
+	/* BLSP1 QUP5(BLSP#6)  */
+	/*---------------------*/
+	blsp6_serial: serial@f9922000 {
+		qcom,config-gpio = <0>;
+		status = "ok";
+	};
+
+	/*---------------------*/
+	/* BLSP2 QUP0(BLSP#7)  */
+	/*---------------------*/
+
+	/*---------------------*/
+	/* BLSP2 QUP1(BLSP#8)  */
+	/*---------------------*/
+
+	/*---------------------*/
+	/* BLSP2 QUP2(BLSP#9)  */
+	/*---------------------*/
+
+	/*---------------------*/
+	/* BLSP2 QUP3(BLSP#10) */
+	/*---------------------*/
+	blsp10_spi: spi@f9966000 {
+		status = "ok";
+		shgrip_dev@0 {
+			status = "ok";
+			compatible = "sharp,shgrip_dev";
+			reg = <0>;
+			spi-max-frequency = <4000000>;
+		};
+	};
+
+	/*---------------------*/
+	/* BLSP2 QUP4(BLSP#11) */
+	/*---------------------*/
+	blsp11_spi: spi@f9967000 {
+		status = "ok";
+		sensorhub@0 {
+			status = "ok";
+			compatible = "sharp,sensorhub";
+			reg = <0>;
+			spi-max-frequency = <960000>;
+			shub,shub_acc_axis_val = <1>;
+			shub,shub_gyro_axis_val = <1>;
+			shub,shub_mag_axis_val = <1>;
+
+			spi-cpol;
+			spi-cpha;
+		};
+	};
+
+	/*---------------------*/
+	/* BLSP2 QUP5(BLSP#12) */
+	/*---------------------*/
+
+	qcom,mdss_dsi_orise_720p_video {
+		status = "disable";
+	};
+
+	qcom,hdmi_tx@fd922100 {
+		status = "ok";
+	};
+
+	gen-vkeys {
+		compatible = "qcom,gen-vkeys";
+		label = "atmel_mxt_ts";
+		qcom,disp-maxx = <720>;
+		qcom,disp-maxy = <1280>;
+		qcom,panel-maxx = <760>;
+		qcom,panel-maxy = <1424>;
+		qcom,key-codes = <158 139 102 217>;
+	};
+
+	gpio_keys {
+		compatible = "gpio-keys";
+		input-name = "gpio-keys";
+
+		vol_down {
+			label = "volume_down";
+			gpios = <&pm8941_gpios 2 0x1>;
+			linux,input-type = <1>;
+			linux,code = <114>;
+			gpio-key,wakeup;
+			debounce-interval = <15>;
+		};
+
+//		camera_snapshot {
+//			label = "camera_snapshot";
+//			gpios = <&pm8941_gpios 3 0x1>;
+//			linux,input-type = <1>;
+//			linux,code = <0x2fe>;
+//			gpio-key,wakeup;
+//			debounce-interval = <15>;
+//		};
+
+//		camera_focus {
+//			label = "camera_focus";
+//			gpios = <&pm8941_gpios 4 0x1>;
+//			linux,input-type = <1>;
+//			linux,code = <0x210>;
+//			gpio-key,wakeup;
+//			debounce-interval = <15>;
+//		};
+
+		vol_up {
+			label = "volume_up";
+			gpios = <&pm8941_gpios 5 0x1>;
+			linux,input-type = <1>;
+			linux,code = <115>;
+			gpio-key,wakeup;
+			debounce-interval = <15>;
+		};
+	};
+
+	sound {
+		qcom,model = "msm8974-taiko-cdp-snd-card";
+/* => SH_AUDIO_DRIVER 07-001 07-003 */
+		qcom,audio-routing =
+			"RX_BIAS", "MCLK",
+			"LDO_H", "MCLK",
+			"AIF4 MAD", "MCLK",
+			"Lineout_2 amp", "LINEOUT2",
+			"Lineout_4 amp", "LINEOUT4",
+/* => SH_AUDIO_DRIVER 09-101 */
+			"Ext Receiver SHRECEIVER", "EAR",
+/* <= SH_AUDIO_DRIVER 09-101 */
+			"AMIC1", "MIC BIAS1 Internal1",
+			"MIC BIAS1 Internal1","Handset Mic",
+			"AMIC2", "MIC BIAS2 External",
+			"MIC BIAS2 External", "Headset Mic",
+			"AMIC3", "MIC BIAS1 External",
+			"MIC BIAS1 External", "Handset Mic",
+			"AMIC4", "MIC BIAS3 External",
+			"MIC BIAS2 External", "Secondary Mic",
+			"DMIC1", "MIC BIAS1 External",
+			"MIC BIAS1 External", "Digital Mic1",
+			"DMIC2", "MIC BIAS1 External",
+			"MIC BIAS1 External", "Digital Mic2",
+			"DMIC3", "MIC BIAS3 External",
+			"MIC BIAS3 External", "Digital Mic3",
+			"DMIC4", "MIC BIAS3 External",
+			"MIC BIAS3 External", "Digital Mic4",
+			"DMIC5", "MIC BIAS4 External",
+			"MIC BIAS4 External", "Digital Mic5",
+			"DMIC6", "MIC BIAS4 External",
+			"MIC BIAS4 External", "Digital Mic6";
+/* <= SH_AUDIO_DRIVER 07-001 07-003 */
+
+/* => SH_AUDIO_DRIVER 07-003 */
+		qcom,ext-spk-amp-gpio = <&pm8941_gpios 4 0>;
+/* <= SH_AUDIO_DRIVER 07-003 */
+//		qcom,hdmi-audio-rx;
+		qcom,us-euro-gpios = <&pm8941_gpios 20 0>;
+		qcom,cdc-micbias2-headset-only;
+/* => SH_AUDIO_DRIVER 09-004 */
+//		qcom,mbhc-audio-jack-type = "6-pole-jack";
+		qcom,mbhc-audio-jack-type = "4-pole-jack";
+/* <= SH_AUDIO_DRIVER 09-004 */
+	};
+
+	usb2_otg_sw: regulator-tpd4s214 {
+		compatible = "regulator-fixed";
+		regulator-name = "usb2_otg_sw";
+		gpio = <&pm8941_gpios 18 0>;
+		parent-supply = <&pm8941_boost>;
+		startup-delay-us = <17000>;
+		enable-active-high;
+		status = "disable";
+	};
+
+	hsic_host: hsic@f9a00000 {
+		compatible = "qcom,hsic-host";
+		reg = <0xf9a00000 0x400>;
+		#address-cells = <0>;
+		interrupt-parent = <&hsic_host>;
+		interrupts = <0 1 2>;
+		#interrupt-cells = <1>;
+		interrupt-map-mask = <0xffffffff>;
+		interrupt-map = <0 &intc 0 136 0
+			1 &intc 0 148 0
+			2 &msmgpio 144 0x8>;
+		interrupt-names = "core_irq", "async_irq", "wakeup";
+		hsic_vdd_dig-supply = <&pm8841_s2_corner>;
+		HSIC_GDSC-supply = <&gdsc_usb_hsic>;
+		hsic,strobe-gpio = <&msmgpio 144 0x00>;
+		hsic,data-gpio = <&msmgpio 145 0x00>;
+		hsic,resume-gpio = <&msmgpio 80 0x00>;
+		hsic,ignore-cal-pad-config;
+		hsic,strobe-pad-offset = <0x2050>;
+		hsic,data-pad-offset = <0x2054>;
+		qcom,phy-susp-sof-workaround;
+		hsic,vdd-voltage-level = <1 5 7>;
+
+		qcom,msm-bus,name = "hsic";
+		qcom,msm-bus,num-cases = <2>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+				<85 512 0 0>,
+				<85 512 40000 160000>;
+		status = "disable";
+        };
+
+	wlan0: qca,wlan {
+		compatible = "qca,ar6004-hsic";
+		qcom,msm-bus,name = "wlan";
+		qcom,msm-bus,num-cases = <5>;
+		qcom,msm-bus,active-only = <0>;
+		qcom,msm-bus,num-paths = <1>;
+		qcom,msm-bus,vectors-KBps =
+				<85 512 0 0>,
+				<85 512 40000 160000>,
+				<85 512 40000 320000>,
+				<85 512 40000 480000>,
+				<85 512 40000 800000>;
+	};
+};
+
+&usb3 {
+	qcom,otg-capability;
+	qcom,dwc-hsphy-init = <0x00D1CDA4>;
+};
+
+/* CoreSight */
+&tpiu {
+	qcom,seta-gpios = <&msmgpio 31 0>,
+			  <&msmgpio 32 0>,
+			  <&msmgpio 33 0>,
+			  <&msmgpio 34 0>,
+			  <&msmgpio 35 0>,
+			  <&msmgpio 36 0>,
+			  <&msmgpio 37 0>,
+			  <&msmgpio 38 0>,
+			  <&msmgpio 39 0>,
+			  <&msmgpio 40 0>,
+			  <&msmgpio 41 0>,
+			  <&msmgpio 42 0>,
+			  <&msmgpio 43 0>,
+			  <&msmgpio 44 0>,
+			  <&msmgpio 45 0>,
+			  <&msmgpio 46 0>,
+			  <&msmgpio 47 0>,
+			  <&msmgpio 48 0>;
+	qcom,seta-gpios-func = <4 4 4 3 4 4 4 3 4 3 5 5 5 5 4 4 5 5>;
+	qcom,seta-gpios-drv =  <7 7 7 7 7 7 7 7 7 7 7 7 7 7 7 7 7 7>;
+	qcom,seta-gpios-pull = <0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0>;
+	qcom,seta-gpios-dir =  <2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2>;
+
+	qcom,setb-gpios = <&msmgpio 15 0>,
+			  <&msmgpio 16 0>,
+			  <&msmgpio 17 0>,
+			  <&msmgpio 18 0>,
+			  <&msmgpio 19 0>,
+			  <&msmgpio 20 0>,
+			  <&msmgpio 21 0>,
+			  <&msmgpio 22 0>,
+			  <&msmgpio 23 0>,
+			  <&msmgpio 24 0>,
+			  <&msmgpio 25 0>,
+			  <&msmgpio 26 0>,
+			  <&msmgpio 27 0>,
+			  <&msmgpio 28 0>,
+			  <&msmgpio 89 0>,
+			  <&msmgpio 90 0>,
+			  <&msmgpio 91 0>,
+			  <&msmgpio 92 0>;
+	qcom,setb-gpios-func = <2 2 2 2 5 5 5 5 6 6 6 7 7 5 2 3 3 3>;
+	qcom,setb-gpios-drv =  <7 7 7 7 7 7 7 7 7 7 7 7 7 7 7 7 7 7>;
+	qcom,setb-gpios-pull = <0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0>;
+	qcom,setb-gpios-dir =  <2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2>;
+};
+
+&slim_msm {
+	taiko_codec {
+		qcom,cdc-micbias1-ext-cap;
+		qcom,cdc-micbias3-ext-cap;
+		qcom,cdc-micbias4-ext-cap;
+/* => SH_AUDIO_DRIVER 09-105 */
+		qcom,cdc-micbias-cfilt1-mv = <2700>;
+		qcom,cdc-micbias-cfilt3-mv = <2700>;
+		qcom,cdc-micbias3-cfilt-sel = <0x0>;
+/* <= SH_AUDIO_DRIVER 09-105 */
+
+		/* If boot isn't available, vph_pwr_vreg can be used instead */
+		cdc-vdd-spkdrv-supply = <&pm8941_boost>;
+		qcom,cdc-vdd-spkdrv-voltage = <5000000 5000000>;
+		qcom,cdc-vdd-spkdrv-current = <1250000>;
+
+		qcom,cdc-on-demand-supplies = "cdc-vdd-spkdrv";
+	};
+};
+
+&dsi_tosh_720_vid {
+       qcom,cont-splash-enabled;
+};
+
+&dsi_generic_720p_cmd {
+       qcom,cont-splash-enabled;
+};
+
+&dsi_jdi_1080_vid {
+       qcom,cont-splash-enabled;
+};
+
+&dsi_dual_jdi_video_0 {
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_pwm";
+	qcom,mdss-dsi-bl-pmic-pwm-frequency = <100>;
+	qcom,mdss-dsi-bl-pmic-bank-select = <7>;
+	qcom,cont-splash-enabled;
+};
+
+&dsi_dual_jdi_video_1 {
+	qcom,cont-splash-enabled;
+};
+
+&dsi_dual_jdi_cmd_0 {
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_pwm";
+	qcom,mdss-dsi-bl-pmic-pwm-frequency = <100>;
+	qcom,mdss-dsi-bl-pmic-bank-select = <7>;
+	qcom,cont-splash-enabled;
+};
+
+&dsi_dual_jdi_cmd_1 {
+	qcom,cont-splash-enabled;
+};
+
+/*****************************************/
+/*  PM8x41                               */
+/*****************************************/
+/include/ "sharp-pa26-pm8841.dtsi"
+/include/ "sharp-pa26-pm8941.dtsi"
+

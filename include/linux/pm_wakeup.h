@@ -61,6 +61,10 @@ struct wakeup_source {
 	unsigned long		wakeup_count;
 	bool			active:1;
 	bool			autosleep_enabled:1;
+#ifdef CONFIG_SH_SLEEP_LOG
+	ktime_t last_log_time;
+#endif
+
 };
 
 #ifdef CONFIG_PM_SLEEP

@@ -18,7 +18,19 @@
 #include "mdss_debug.h"
 #include "mdss_mdp_trace.h"
 
+#ifdef CONFIG_SHDISP /* CUST_ID_00041 */
+#include "mdss_dsi.h"
+#include "mdss_shdisp.h"
+#endif /* CONFIG_SHDISP */
+
+#ifdef CONFIG_SHDISP /* CUST_ID_00039 */
+#define VSYNC_EXPIRE_TICK 3
+#else /* CONFIG_SHDISP */
 #define VSYNC_EXPIRE_TICK 4
+#endif /* CONFIG_SHDISP */
+
+#define START_THRESHOLD 4
+#define CONTINUE_THRESHOLD 4
 
 #define MAX_SESSIONS 2
 
@@ -27,6 +39,11 @@
 
 #define STOP_TIMEOUT(hz) msecs_to_jiffies((1000 / hz) * (VSYNC_EXPIRE_TICK + 2))
 #define ULPS_ENTER_TIME msecs_to_jiffies(100)
+
+#ifdef CONFIG_SHDISP /* CUST_ID_00008 */
+#define DFLT_RD_PTR_IRQ	1614
+#define DFLT_START_POS	1600
+#endif /* CONFIG_SHDISP */
 
 struct mdss_mdp_cmd_ctx {
 	struct mdss_mdp_ctl *ctl;
@@ -46,6 +63,10 @@ struct mdss_mdp_cmd_ctx {
 	struct delayed_work ulps_work;
 	struct work_struct pp_done_work;
 	atomic_t pp_done_cnt;
+#ifdef CONFIG_SHDISP /* CUST_ID_00041 */
+	struct mutex qos_mtx;
+	int qos_deny_collapse;
+#endif /* CONFIG_SHDISP */
 
 	/* te config */
 	u8 tear_check;
@@ -156,6 +177,19 @@ static int mdss_mdp_cmd_tearcheck_cfg(struct mdss_mdp_ctl *ctl,
 		te->sync_threshold_start, te->sync_threshold_continue);
 
 	mdss_mdp_pingpong_write(mixer, MDSS_MDP_REG_PP_SYNC_CONFIG_VSYNC, cfg);
+#ifdef CONFIG_SHDISP /* CUST_ID_00008 */
+
+	mdss_mdp_pingpong_write(mixer, MDSS_MDP_REG_PP_SYNC_CONFIG_HEIGHT,
+				mdss_panel_get_vtotal(pinfo) - 1); /* set to verh height JERRY_UPDATE 2018 JULY
+				commit: 23d6312194a46c18dd7c0baa689a1478a9000f2d
+				old: 	mdss_mdp_pingpong_write(mixer, MDSS_MDP_REG_PP_SYNC_CONFIG_HEIGHT,
+				ctx->height + ctx->vporch - 1);
+				 */
+	mdss_mdp_pingpong_write(mixer, MDSS_MDP_REG_PP_VSYNC_INIT_VAL, 0);
+	mdss_mdp_pingpong_write(mixer, MDSS_MDP_REG_PP_RD_PTR_IRQ, DFLT_RD_PTR_IRQ);
+
+	mdss_mdp_pingpong_write(mixer, MDSS_MDP_REG_PP_START_POS, DFLT_START_POS);
+#else /* CONFIG_SHDISP */
 	mdss_mdp_pingpong_write(mixer, MDSS_MDP_REG_PP_SYNC_CONFIG_HEIGHT,
 				te->sync_cfg_height);
 	mdss_mdp_pingpong_write(mixer, MDSS_MDP_REG_PP_VSYNC_INIT_VAL,
@@ -164,6 +198,7 @@ static int mdss_mdp_cmd_tearcheck_cfg(struct mdss_mdp_ctl *ctl,
 				te->rd_ptr_irq);
 	mdss_mdp_pingpong_write(mixer, MDSS_MDP_REG_PP_START_POS,
 				te->start_pos);
+#endif /* CONFIG_SHDISP */
 	mdss_mdp_pingpong_write(mixer, MDSS_MDP_REG_PP_SYNC_THRESH,
 				((te->sync_threshold_continue << 16) |
 				 te->sync_threshold_start));
@@ -235,7 +270,11 @@ static inline void mdss_mdp_cmd_clk_on(struct mdss_mdp_cmd_ctx *ctx)
 	mutex_unlock(&ctx->clk_mtx);
 }
 
+#ifndef CONFIG_SHDISP /* CUST_ID_00045 */
 static inline void mdss_mdp_cmd_clk_off(struct mdss_mdp_cmd_ctx *ctx)
+#else /* CONFIG_SHDISP */
+static inline void mdss_mdp_cmd_clk_off(struct mdss_mdp_cmd_ctx *ctx, bool force)
+#endif /* CONFIG_SHDISP */
 {
 	unsigned long flags;
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
@@ -245,6 +284,12 @@ static inline void mdss_mdp_cmd_clk_off(struct mdss_mdp_cmd_ctx *ctx)
 	MDSS_XLOG(ctx->pp_num, ctx->koff_cnt, ctx->clk_enabled,
 						ctx->rdptr_enabled);
 	spin_lock_irqsave(&ctx->clk_lock, flags);
+#ifdef CONFIG_SHDISP /* CUST_ID_00045 */
+	if (force && ctx->rdptr_enabled) {
+		ctx->rdptr_enabled = 0;
+		mdss_mdp_irq_disable_nosync(MDSS_MDP_IRQ_PING_PONG_RD_PTR, ctx->pp_num);
+	}
+#endif /* CONFIG_SHDISP */
 	if (!ctx->rdptr_enabled)
 		set_clk_off = 1;
 	spin_unlock_irqrestore(&ctx->clk_lock, flags);
@@ -360,6 +405,9 @@ static void mdss_mdp_cmd_pingpong_done(void *arg)
 			       atomic_read(&ctx->koff_cnt));
 		if (mdss_mdp_cmd_do_notifier(ctx)) {
 			atomic_inc(&ctx->pp_done_cnt);
+#ifdef CONFIG_SHDISP /* CUST_ID_00041 */
+		ctx->qos_deny_collapse = 0;
+#endif /* CONFIG_SHDISP */
 			schedule_work(&ctx->pp_done_work);
 		}
 		wake_up_all(&ctx->pp_waitq);
@@ -381,12 +429,18 @@ static void pingpong_done_work(struct work_struct *work)
 	struct mdss_mdp_cmd_ctx *ctx =
 		container_of(work, typeof(*ctx), pp_done_work);
 
+#ifndef CONFIG_SHDISP /* CUST_ID_00041 */
+	if (ctx->ctl)
+		while (atomic_add_unless(&ctx->pp_done_cnt, -1, 0))
+			mdss_mdp_ctl_notify(ctx->ctl, MDP_NOTIFY_FRAME_DONE);
+#else /* CONFIG_SHDISP */
 	if (ctx->ctl) {
 		while (atomic_add_unless(&ctx->pp_done_cnt, -1, 0))
 			mdss_mdp_ctl_notify(ctx->ctl, MDP_NOTIFY_FRAME_DONE);
 
 		mdss_mdp_ctl_perf_release_bw(ctx->ctl);
 	}
+#endif /* CONFIG_SHDISP */
 }
 
 static void clk_ctrl_work(struct work_struct *work)
@@ -399,7 +453,11 @@ static void clk_ctrl_work(struct work_struct *work)
 		return;
 	}
 
+#ifndef CONFIG_SHDISP /* CUST_ID_00045 */
 	mdss_mdp_cmd_clk_off(ctx);
+#else /* CONFIG_SHDISP */
+	mdss_mdp_cmd_clk_off(ctx, false);
+#endif /* CONFIG_SHDISP */
 }
 
 static void __mdss_mdp_cmd_ulps_work(struct work_struct *work)
@@ -666,6 +724,11 @@ int mdss_mdp_cmd_kickoff(struct mdss_mdp_ctl *ctl, void *arg)
 	if (sctx)
 		atomic_inc(&sctx->koff_cnt);
 
+#ifdef CONFIG_SHDISP /* CUST_ID_00041 */
+	mutex_lock(&ctx->qos_mtx);
+	mipi_dsi_latency_deny_collapse();
+	ctx->qos_deny_collapse = 1;
+#endif /* CONFIG_SHDISP */
 	trace_mdp_cmd_kickoff(ctl->num, atomic_read(&ctx->koff_cnt));
 
 	mdss_mdp_cmd_clk_on(ctx);
@@ -686,6 +749,10 @@ int mdss_mdp_cmd_kickoff(struct mdss_mdp_ctl *ctl, void *arg)
 	mb();
 	MDSS_XLOG(ctl->num,  ctx->koff_cnt, ctx->clk_enabled,
 						ctx->rdptr_enabled);
+
+#ifdef CONFIG_SHDISP /* CUST_ID_00041 */
+	mutex_unlock(&ctx->qos_mtx);
+#endif /* CONFIG_SHDISP */
 
 	return 0;
 }
@@ -748,7 +815,12 @@ int mdss_mdp_cmd_stop(struct mdss_mdp_ctl *ctl)
 			NULL);
 
 	ctx->panel_on = 0;
+
+#ifndef CONFIG_SHDISP /* CUST_ID_00045 */
 	mdss_mdp_cmd_clk_off(ctx);
+#else /* CONFIG_SHDISP */
+	mdss_mdp_cmd_clk_off(ctx, true);
+#endif /* CONFIG_SHDISP */
 
 	flush_work(&ctx->pp_done_work);
 
@@ -757,6 +829,13 @@ int mdss_mdp_cmd_stop(struct mdss_mdp_ctl *ctl)
 				   NULL, NULL);
 	mdss_mdp_set_intr_callback(MDSS_MDP_IRQ_PING_PONG_COMP, ctx->pp_num,
 				   NULL, NULL);
+
+#ifdef CONFIG_SHDISP /* CUST_ID_00041 */
+	mutex_lock(&ctx->qos_mtx);
+	mipi_dsi_latency_allow_collapse();
+	ctx->qos_deny_collapse = 0;
+	mutex_unlock(&ctx->qos_mtx);
+#endif /* CONFIG_SHDISP */
 
 	memset(ctx, 0, sizeof(*ctx));
 	ctl->priv_data = NULL;
@@ -846,6 +925,10 @@ int mdss_mdp_cmd_start(struct mdss_mdp_ctl *ctl)
 		return ret;
 	}
 
+#ifdef CONFIG_SHDISP /* CUST_ID_00041 */
+	mutex_init(&ctx->qos_mtx);
+#endif /* CONFIG_SHDISP */
+
 	ctl->stop_fnc = mdss_mdp_cmd_stop;
 	ctl->display_fnc = mdss_mdp_cmd_kickoff;
 	ctl->wait_pingpong = mdss_mdp_cmd_wait4pingpong;
@@ -856,4 +939,58 @@ int mdss_mdp_cmd_start(struct mdss_mdp_ctl *ctl)
 
 	return 0;
 }
+
+#ifdef CONFIG_SHDISP /* CUST_ID_00056 */
+int mdss_mdp_cmd_cancel_clk_work(struct mdss_mdp_ctl *pctl)
+{
+	struct mdss_mdp_cmd_ctx *pctx;
+
+	pr_debug("%s: enter - (ctl=%p)\n", __func__, pctl);
+
+	if (!pctl) {
+		pr_err("invalid argument.\n");
+		return -EINVAL;
+	}
+
+	pctx = (struct mdss_mdp_cmd_ctx*)pctl->priv_data;
+	if (!pctx) {
+		pr_err("invalid ctx.\n");
+		return -ENODEV;
+	}
+
+	if (cancel_work_sync(&pctx->clk_work)) {
+		pr_debug("no pending clk work.\n");
+	}
+
+	pr_debug("%s: leave - (ret=0)\n", __func__);
+	return 0;
+}
+
+int mdss_mdp_cmd_clk_ctrl(struct mdss_mdp_ctl *pctl, bool onoff)
+{
+	struct mdss_mdp_cmd_ctx *pctx;
+
+	pr_debug("%s: enter - (ctl=%p onoff=%d)\n", __func__, pctl, onoff);
+
+	if (!pctl) {
+		pr_err("invalid argument.\n");
+		return -EINVAL;
+	}
+
+	pctx = (struct mdss_mdp_cmd_ctx*)pctl->priv_data;
+	if (!pctx) {
+		pr_err("invalid ctx.\n");
+		return -ENODEV;
+	}
+
+	if (onoff) {
+		mdss_mdp_cmd_clk_on(pctx);
+	} else {
+		schedule_work(&pctx->clk_work);
+	}
+
+	pr_debug("%s: leave - (ret=0)\n", __func__);
+	return 0;
+}
+#endif /* CONFIG_SHDISP */
 

@@ -30,11 +30,20 @@ static DEFINE_SPINLOCK(uid_lock);
 static LIST_HEAD(uid_list);
 static struct proc_dir_entry *parent;
 
+#ifdef CONFIG_SH_SLEEP_LOG
+#include <sharp/sh_sleeplog.h>
+#endif
+
 struct uid_stat {
 	struct list_head link;
 	uid_t uid;
 	atomic_t tcp_rcv;
 	atomic_t tcp_snd;
+#ifdef CONFIG_SH_SLEEP_LOG
+	unsigned int last_tcp_rcv;
+	unsigned int last_tcp_snd;
+	char process_name[UID_STATS_MAX_PROCESS_NAME];
+#endif
 };
 
 static struct uid_stat *find_uid_stat(uid_t uid) {
@@ -100,6 +109,9 @@ static struct uid_stat *create_stat(uid_t uid) {
 		return NULL;
 
 	new_uid->uid = uid;
+#ifdef CONFIG_SH_SLEEP_LOG
+	sh_get_process_name(current, new_uid->process_name);
+#endif
 	/* Counters start at INT_MIN, so we can track 4GB of network traffic. */
 	atomic_set(&new_uid->tcp_rcv, INT_MIN);
 	atomic_set(&new_uid->tcp_snd, INT_MIN);
@@ -142,6 +154,46 @@ int uid_stat_tcp_rcv(uid_t uid, int size) {
 	atomic_add(size, &entry->tcp_rcv);
 	return 0;
 }
+
+#ifdef CONFIG_SH_SLEEP_LOG
+char *sh_write_buffer_uid_stat(char *buffer) {
+	unsigned long flags;
+	struct uid_stat *entry;
+	char *head, *ret;
+	unsigned int rcv, snd, diff_rcv, diff_snd;
+
+	head = buffer;
+	buffer += sizeof(short);
+
+	spin_lock_irqsave(&uid_lock, flags);
+	list_for_each_entry(entry, &uid_list, link) {
+		rcv = (unsigned int) (atomic_read(&entry->tcp_rcv) + INT_MIN);
+		if(rcv > entry->last_tcp_rcv) {
+			diff_rcv = rcv - entry->last_tcp_rcv;
+		} else {
+			diff_rcv = 0;
+		}
+		entry->last_tcp_rcv = rcv;
+
+		snd = (unsigned int) (atomic_read(&entry->tcp_rcv) + INT_MIN);
+		if(snd > entry->last_tcp_snd) {
+			diff_snd = snd - entry->last_tcp_snd;
+		} else {
+			diff_snd = 0;
+		}
+		entry->last_tcp_snd = snd;
+
+		if(diff_snd > 0 || diff_rcv > 0) {
+			ret = sh_write_buffer_uid_stat_internal(buffer, entry->uid, entry->process_name, diff_rcv, diff_snd);
+			if(!ret) break;
+			buffer = ret;
+		}
+	}
+	spin_unlock_irqrestore(&uid_lock, flags);
+
+	return sh_write_buffer_uid_stat_finish(buffer, head);
+}
+#endif
 
 static int __init uid_stat_init(void)
 {

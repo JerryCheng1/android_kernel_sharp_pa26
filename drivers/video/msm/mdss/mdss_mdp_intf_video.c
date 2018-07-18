@@ -24,6 +24,10 @@
 #include "mdss_debug.h"
 #include "mdss_mdp_trace.h"
 
+#ifdef CONFIG_SHDISP /* CUST_ID_00050 */
+#include "mdss_dsi.h"
+#endif /* CONFIG_SHDISP */
+
 /* wait for at least 2 vsyncs for lowest refresh rate (24hz) */
 #define VSYNC_TIMEOUT_US 100000
 
@@ -783,7 +787,11 @@ int mdss_mdp_video_reconfigure_splash_done(struct mdss_mdp_ctl *ctl,
 
 	if (!handoff) {
 		ret = mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_CONT_SPLASH_BEGIN,
+#ifdef CONFIG_SHDISP /* CUST_ID_00050 */
+							(void *) DSI_HS_MODE);
+#else  /* CONFIG_SHDISP */
 					      NULL);
+#endif /* CONFIG_SHDISP */
 		if (ret) {
 			pr_err("%s: Failed to handle 'CONT_SPLASH_BEGIN' event\n"
 				, __func__);
@@ -795,6 +803,17 @@ int mdss_mdp_video_reconfigure_splash_done(struct mdss_mdp_ctl *ctl,
 
 		/* wait for 1 VSYNC for the pipe to be unstaged */
 		msleep(20);
+#ifdef CONFIG_SHDISP /* CUST_ID_00050 */
+
+		ret = mdss_mdp_ctl_intf_event(ctl, MDSS_EVENT_CONT_SPLASH_BEGIN,
+							(void *) DSI_LP_MODE);
+		if (ret) {
+			pr_err("%s: Failed to handle 'CONT_SPLASH_BEGIN' event\n"
+				, __func__);
+			return ret;
+		}
+
+#endif /* CONFIG_SHDISP */
 
 		ret = mdss_mdp_ctl_intf_event(ctl,
 			MDSS_EVENT_CONT_SPLASH_FINISH, NULL);
@@ -893,3 +912,64 @@ int mdss_mdp_video_start(struct mdss_mdp_ctl *ctl)
 
 	return 0;
 }
+
+#ifdef CONFIG_SHDISP /* CUST_ID_00040 */
+void mdss_mdp_video_transfer_ctrl(struct msm_fb_data_type *mfd, int onoff)
+{
+	struct mdss_overlay_private *mdp5_data = NULL;
+	struct mdss_mdp_ctl *ctl;
+	struct mdss_mdp_video_ctx *ctx;
+	struct mdss_panel_data *pdata;
+	struct mdss_dsi_ctrl_pdata * mdss_dsi_ctrl;
+
+	if (!mfd) {
+		pr_err("invalid mfd\n");
+		return;
+	}
+
+	mdp5_data = mfd_to_mdp5_data(mfd);
+	if (!mdp5_data) {
+		pr_err("invalid mdp5_data\n");
+		return;
+	}
+
+	ctl = mdp5_data->ctl;
+	if (!ctl) {
+		pr_err("invalid ctl\n");
+		return;
+	}
+
+	ctx = (struct mdss_mdp_video_ctx *)ctl->priv_data;
+	if (!ctx) {
+		pr_err("invalid ctx\n");
+		return;
+	}
+
+	pdata = ctl->panel_data;
+	if (!pdata) {
+		pr_err("invalid pdata\n");
+		return;
+	}
+
+	mdss_dsi_ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
+				panel_data);
+	
+	if (onoff) {
+		mdp_video_write(ctx, MDSS_MDP_REG_INTF_TIMING_ENGINE_EN, 1);
+		wmb();
+		mdss_dsi_ctrl->ctrl_state |= CTRL_STATE_MDP_ACTIVE;
+		ctl->force_screen_state = MDSS_SCREEN_DEFAULT;
+		mdss_mdp_display_commit(ctl, NULL);
+		mdss_mdp_display_wait4comp(ctl);
+	} else {
+		ctl->force_screen_state = MDSS_SCREEN_FORCE_BLANK;
+		mdss_mdp_display_commit(ctl, NULL);
+		mdss_mdp_display_wait4comp(ctl);
+		mdp_video_write(ctx, MDSS_MDP_REG_INTF_TIMING_ENGINE_EN, 0);
+		wmb();
+		msleep(20);
+		mdss_dsi_ctrl->ctrl_state &= ~CTRL_STATE_MDP_ACTIVE;
+		mdss_dsi_controller_cfg(true, pdata);
+	}
+}
+#endif /* CONFIG_SHDISP */

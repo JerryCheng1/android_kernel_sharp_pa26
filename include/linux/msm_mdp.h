@@ -82,6 +82,14 @@
 #define MSMFB_OVERLAY_PREPARE		_IOWR(MSMFB_IOCTL_MAGIC, 169, \
 						struct mdp_overlay_list)
 #define MSMFB_LPM_ENABLE        _IOWR(MSMFB_IOCTL_MAGIC, 170, unsigned int)
+#define MSMFB_PANEL_STATE_CHG_WAIT _IOW(MSMFB_IOCTL_MAGIC, 180, unsigned int)
+#define MSMFB_SET_SSPP _IOW(MSMFB_IOCTL_MAGIC, 181, struct mdp_overlay_pp_params)
+#define MSMFB_CHANGE_BASE_FPS_LOW  _IOW(MSMFB_IOCTL_MAGIC, 182, unsigned int)
+#define MSMFB_SPECIFIED_IGC_LUT _IOWR(MSMFB_IOCTL_MAGIC, 183, struct mdp_specified_igc_lut_data)
+#define MSMFB_SPECIFIED_ARGC_LUT _IOWR(MSMFB_IOCTL_MAGIC, 184, struct mdp_specified_pgc_lut_data)
+#define MSMFB_MIPI_DSI_CHECK _IOWR(MSMFB_IOCTL_MAGIC, 185, struct mdp_mipi_check_param)
+#define MSMFB_MIPI_DSI_CLKCHG _IOW(MSMFB_IOCTL_MAGIC, 186, struct mdp_mipi_clkchg_param)
+#define MSMFB_SET_MFR _IOW(MSMFB_IOCTL_MAGIC, 230, int)
 #define FB_TYPE_3D_PANEL 0x10101010
 #define MDP_IMGTYPE2_START 0x10000
 #define MSMFB_DRIVER_VERSION	0xF9E8D701
@@ -236,6 +244,11 @@ enum {
 #define MDP_FB_PAGE_PROTECTION_INVALID           (5)
 /* Count of the number of MDP_FB_PAGE_PROTECTION_... values. */
 #define MDP_NUM_FB_PAGE_PROTECTION_VALUES        (5)
+
+enum {
+	MSMFB_BASE_FPS_LOW_DISABLE,
+	MSMFB_BASE_FPS_LOW_ENABLE,
+};
 
 struct mdp_rect {
 	uint32_t x;
@@ -475,6 +488,15 @@ struct mdp_igc_lut_data {
 	uint32_t len, ops;
 	uint32_t *c0_c1_data;
 	uint32_t *c2_data;
+};
+
+struct mdp_specified_igc_lut_data {
+	uint32_t block;
+	uint32_t ops;
+	uint32_t index;
+	uint32_t c0_data;
+	uint32_t c1_data;
+	uint32_t c2_data;
 };
 
 struct mdp_histogram_cfg {
@@ -783,6 +805,15 @@ struct mdp_pgc_lut_data {
 	struct mdp_ar_gc_lut_data *r_data;
 	struct mdp_ar_gc_lut_data *g_data;
 	struct mdp_ar_gc_lut_data *b_data;
+};
+
+struct mdp_specified_pgc_lut_data {
+	uint32_t block;
+	uint32_t flags;
+	uint8_t stage;
+	struct mdp_ar_gc_lut_data r_data;
+	struct mdp_ar_gc_lut_data g_data;
+	struct mdp_ar_gc_lut_data b_data;
 };
 
 
@@ -1123,6 +1154,51 @@ enum {
 	MDP_WRITEBACK_MIRROR_RESUME,
 };
 
+#define MDSS_MIPICHK_MANUAL 0
+#define MDSS_MIPICHK_AUTO   1
+#define MDSS_MIPICHK_RESULT_OK 1
+#define MDSS_MIPICHK_RESULT_NG 0
+
+
+#define MDSS_MIPICHK_AMP_NUM 8
+#define MDSS_MIPICHK_SENSITIV_NUM 16
+#define MDSS_MIPICHK_RESULT_NUM (((MDSS_MIPICHK_SENSITIV_NUM + (8 - 1)) / 8) * MDSS_MIPICHK_AMP_NUM)
+
+struct mdp_mipi_check_param {
+	uint8_t mode;
+	uint8_t flame_cnt;
+	uint8_t amp;
+	uint8_t sensitiv;
+	uint8_t result[MDSS_MIPICHK_RESULT_NUM];
+};
+
+struct mdp_mipi_clkchg_host {
+	unsigned long clock_rate;
+	unsigned short display_width;
+	unsigned short display_height;
+	unsigned short hsync_pulse_width;
+	unsigned short h_back_porch;
+	unsigned short h_front_porch;
+	unsigned short vsync_pulse_width;
+	unsigned short v_back_porch;
+	unsigned short v_front_porch;
+	unsigned char t_clk_post;
+	unsigned char t_clk_pre;
+	unsigned char timing_ctrl[12];
+};
+
+struct mdp_mipi_clkchg_panel_andy {
+	unsigned char rtn;
+	unsigned char gip;
+};
+
+struct mdp_mipi_clkchg_param {
+	struct mdp_mipi_clkchg_host host;
+	union {
+		struct mdp_mipi_clkchg_panel_andy andy;
+	} panel;
+};
+
 #ifdef __KERNEL__
 int msm_fb_get_iommu_domain(struct fb_info *info, int domain);
 /* get the framebuffer physical address information */
@@ -1138,6 +1214,9 @@ int msm_fb_writeback_dequeue_buffer(struct fb_info *info,
 int msm_fb_writeback_stop(struct fb_info *info);
 int msm_fb_writeback_terminate(struct fb_info *info);
 int msm_fb_writeback_set_secure(struct fb_info *info, int enable);
+#ifdef CONFIG_SHDISP /* CUST_ID_00040 */
+int msm_fb_set_wfd_iommu_flag(int enable);
+#endif /* CONFIG_SHDISP */
 int msm_fb_writeback_iommu_ref(struct fb_info *info, int enable);
 #endif
 

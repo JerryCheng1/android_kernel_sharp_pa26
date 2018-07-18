@@ -20,6 +20,9 @@
 #include <linux/platform_device.h>
 #include <linux/notifier.h>
 #include <linux/kref.h>
+#ifdef CONFIG_SHDISP /* CUST_ID_00012 (1HZ) */
+#include <linux/hrtimer.h>
+#endif /* CONFIG_SHDISP */
 
 #include "mdss.h"
 #include "mdss_mdp_hwio.h"
@@ -461,6 +464,10 @@ struct mdss_overlay_private {
 	u32 splash_mem_size;
 	u32 sd_enabled;
 
+#ifdef	CONFIG_SHDISP /* CUST_ID_00017 */
+	int fpslow_count;
+#endif /* CONFIG_SHDISP */
+
 	struct sw_sync_timeline *vsync_timeline;
 	struct mdss_mdp_vsync_handler vsync_retire_handler;
 	struct work_struct retire_work;
@@ -479,7 +486,9 @@ enum mdss_screen_state {
 };
 
 #define is_vig_pipe(_pipe_id_) ((_pipe_id_) <= MDSS_MDP_SSPP_VIG2)
-
+#if 1 /* CUST_ID_00012 (1HZ) 
+redef: drivers/video/msm/mdss/mdss_mdp_intf_hr_video.c
+JERRY_UPDATE 2018 JULY */
 static inline struct mdss_mdp_ctl *mdss_mdp_get_split_ctl(
 	struct mdss_mdp_ctl *ctl)
 {
@@ -488,7 +497,7 @@ static inline struct mdss_mdp_ctl *mdss_mdp_get_split_ctl(
 
 	return NULL;
 }
-
+#endif /* CONFIG_SHDISP */
 static inline void mdss_mdp_ctl_write(struct mdss_mdp_ctl *ctl,
 				      u32 reg, u32 val)
 {
@@ -633,6 +642,10 @@ int mdss_mdp_csc_setup_data(u32 block, u32 blk_idx, u32 tbl_idx,
 				   struct mdp_csc_cfg *data);
 
 int mdss_mdp_pp_init(struct device *dev);
+#ifdef CONFIG_SHDISP /* CUST_ID_00038 */
+int mdss_mdp_pp_argc_init(void);
+int mdss_mdp_pp_igc_init(void);
+#endif /* CONFIG_SHDISP */
 void mdss_mdp_pp_term(struct device *dev);
 int mdss_mdp_pp_overlay_init(struct msm_fb_data_type *mfd);
 
@@ -652,6 +665,10 @@ int mdss_mdp_pa_v2_config(struct mdp_pa_v2_cfg_data *config, u32 *copyback);
 int mdss_mdp_pcc_config(struct mdp_pcc_cfg_data *cfg_ptr, u32 *copyback);
 int mdss_mdp_igc_lut_config(struct mdp_igc_lut_data *config, u32 *copyback,
 				u32 copy_from_kernel);
+#ifdef CONFIG_SHDISP /* CUST_ID_00026 */
+int mdss_mdp_specified_igc_lut_config(struct mdp_specified_igc_lut_data *config);
+int mdss_mdp_specified_argc_lut_config(struct mdp_specified_pgc_lut_data *config);
+#endif /* CONFIG_SHDISP */
 int mdss_mdp_argc_config(struct mdp_pgc_lut_data *config, u32 *copyback);
 int mdss_mdp_hist_lut_config(struct mdp_hist_lut_data *config, u32 *copyback);
 int mdss_mdp_dither_config(struct mdp_dither_cfg_data *config, u32 *copyback);
@@ -760,6 +777,17 @@ int mdss_mdp_pipe_program_pixel_extn(struct mdss_mdp_pipe *pipe);
 				(mfd->mdp.private1))->ctl)
 #define mfd_to_wb(mfd) (((struct mdss_overlay_private *)\
 				(mfd->mdp.private1))->wb)
+#ifdef CONFIG_SHDISP /* CUST_ID_00012 (1HZ) */
+int mdss_mdp_hr_video_addr_setup(struct mdss_data_type *mdata,
+				u32 *offsets,  u32 count);
+int mdss_mdp_hr_video_reconfigure_splash_done(struct mdss_mdp_ctl *ctl,
+	bool handoff);
+int mdss_mdp_hr_video_start(struct mdss_mdp_ctl *ctl);
+#endif /* CONFIG_SHDISP */
+#ifdef CONFIG_SHDISP /* CUST_ID_00055 */
+void mdss_mdp_ctl_perf_update_ctl(struct mdss_mdp_ctl *ctl,
+	int params_changed);
+#endif /* CONFIG_SHDISP */
 
 int  mdss_mdp_ctl_reset(struct mdss_mdp_ctl *ctl);
 #endif /* MDSS_MDP_H */

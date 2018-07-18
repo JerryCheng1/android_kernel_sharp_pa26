@@ -21,6 +21,9 @@
 #include <linux/delay.h>
 #include <mach/msm_bus.h>
 #include <mach/msm_bus_board.h>
+#ifdef CONFIG_SHDISP /* CUST_ID_00038 */
+#include <sharp/shdisp_kerl.h>
+#endif /* CONFIG_SHDISP */
 
 struct mdp_csc_cfg mdp_csc_convert[MDSS_MDP_MAX_CSC] = {
 	[MDSS_MDP_CSC_RGB2RGB] = {
@@ -294,6 +297,10 @@ static u32 igc_limited[IGC_LUT_ENTRIES] = {
 
 #define SZ_37_5M (37500000 * 8)
 
+#ifdef CONFIG_SHDISP /* CUST_ID_00060 */
+#define MDP_HIST_START_SLEEP (2 * 1000)
+#endif /* CONFIG_SHDISP */
+
 static struct msm_bus_vectors mdp_pp_bus_vectors[] = {
 	MDP_PP_BUS_VECTOR_ENTRY(0, 0),
 	MDP_PP_BUS_VECTOR_ENTRY(0, SZ_37_5M),
@@ -494,6 +501,9 @@ int mdss_mdp_csc_setup_data(u32 block, u32 blk_idx, u32 tbl_idx,
 
 	addr = base + CSC_MV_OFF;
 	for (i = 0; i < 9; i++) {
+#ifdef CONFIG_SHDISP /* CUST_ID_00019 */
+        pr_debug("data->csc_mv[%d]:0x%04x\n", i, data->csc_mv[i]);
+#endif /* CONFIG_SHDISP */
 		if (i & 0x1) {
 			val |= data->csc_mv[i] << 16;
 			writel_relaxed(val, addr);
@@ -506,6 +516,9 @@ int mdss_mdp_csc_setup_data(u32 block, u32 blk_idx, u32 tbl_idx,
 
 	addr = base + CSC_BV_OFF;
 	for (i = 0; i < 3; i++) {
+#ifdef CONFIG_SHDISP /* CUST_ID_00019 */
+        pr_debug("data->csc_pre_bv[%d]:0x%03x, data->csc_post_bv[%d]:0x%03x\n", i, data->csc_pre_bv[i], i, data->csc_post_bv[i]);
+#endif /* CONFIG_SHDISP */
 		writel_relaxed(data->csc_pre_bv[i], addr);
 		writel_relaxed(data->csc_post_bv[i], addr + CSC_POST_OFF);
 		addr += sizeof(u32 *);
@@ -513,9 +526,15 @@ int mdss_mdp_csc_setup_data(u32 block, u32 blk_idx, u32 tbl_idx,
 
 	addr = base + CSC_LV_OFF;
 	for (i = 0; i < 6; i += 2) {
+#ifdef CONFIG_SHDISP /* CUST_ID_00019 */
+        pr_debug("data->csc_pre_lv[%d]:0x%02x, data->csc_pre_lv[%d]:0x%02x\n", i, data->csc_pre_lv[i], i+1, data->csc_pre_lv[i+1]);
+#endif /* CONFIG_SHDISP */
 		val = (data->csc_pre_lv[i] << 8) | data->csc_pre_lv[i+1];
 		writel_relaxed(val, addr);
 
+#ifdef CONFIG_SHDISP /* CUST_ID_00019 */
+        pr_debug("data->csc_post_lv[%d]:0x%02x, data->csc_post_lv[%d]:0x%02x\n", i, data->csc_post_lv[i], i+1, data->csc_post_lv[i+1]);
+#endif /* CONFIG_SHDISP */
 		val = (data->csc_post_lv[i] << 8) | data->csc_post_lv[i+1];
 		writel_relaxed(val, addr + CSC_POST_OFF);
 		addr += sizeof(u32 *);
@@ -540,6 +559,27 @@ int mdss_mdp_csc_setup(u32 block, u32 blk_idx, u32 tbl_idx, u32 csc_type)
 	return mdss_mdp_csc_setup_data(block, blk_idx, tbl_idx, data);
 }
 
+#ifdef CONFIG_SHDISP /* CUST_ID_00019 */
+#define GAMUT_CFG_TBL_DUMP(rgb, tbl_no, cfg_tbl, cfg_tbl_size, offset) \
+pr_debug("[%c] Table[%d]:cfg->r_tbl[%d]:%d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d\n" \
+, rgb, tbl_no, offset \
+, (offset+0x0 < cfg_tbl_size ? cfg_tbl[offset+0x0] : -1) \
+, (offset+0x1 < cfg_tbl_size ? cfg_tbl[offset+0x1] : -1) \
+, (offset+0x2 < cfg_tbl_size ? cfg_tbl[offset+0x2] : -1) \
+, (offset+0x3 < cfg_tbl_size ? cfg_tbl[offset+0x3] : -1) \
+, (offset+0x4 < cfg_tbl_size ? cfg_tbl[offset+0x4] : -1) \
+, (offset+0x5 < cfg_tbl_size ? cfg_tbl[offset+0x5] : -1) \
+, (offset+0x6 < cfg_tbl_size ? cfg_tbl[offset+0x6] : -1) \
+, (offset+0x7 < cfg_tbl_size ? cfg_tbl[offset+0x7] : -1) \
+, (offset+0x8 < cfg_tbl_size ? cfg_tbl[offset+0x8] : -1) \
+, (offset+0x9 < cfg_tbl_size ? cfg_tbl[offset+0x9] : -1) \
+, (offset+0xa < cfg_tbl_size ? cfg_tbl[offset+0xa] : -1) \
+, (offset+0xb < cfg_tbl_size ? cfg_tbl[offset+0xb] : -1) \
+, (offset+0xc < cfg_tbl_size ? cfg_tbl[offset+0xc] : -1) \
+, (offset+0xd < cfg_tbl_size ? cfg_tbl[offset+0xd] : -1) \
+, (offset+0xe < cfg_tbl_size ? cfg_tbl[offset+0xe] : -1) \
+, (offset+0xf < cfg_tbl_size ? cfg_tbl[offset+0xf] : -1))
+#endif /* CONFIG_SHDISP */
 static void pp_gamut_config(struct mdp_gamut_cfg_data *gamut_cfg,
 				char __iomem *base, struct pp_sts_type *pp_sts)
 {
@@ -551,18 +591,39 @@ static void pp_gamut_config(struct mdp_gamut_cfg_data *gamut_cfg,
 			for (j = 0; j < gamut_cfg->tbl_size[i]; j++)
 				writel_relaxed((u32)gamut_cfg->r_tbl[i][j],
 						addr);
+#ifdef CONFIG_SHDISP /* CUST_ID_00019 */
+			j = 0;
+			while (j < gamut_cfg->tbl_size[i]) {
+				GAMUT_CFG_TBL_DUMP('R', i, gamut_cfg->r_tbl[i], gamut_cfg->tbl_size[i], j);
+				j += 0x10;
+			}
+#endif /* CONFIG_SHDISP */
 			addr += 4;
 		}
 		for (i = 0; i < MDP_GAMUT_TABLE_NUM; i++) {
 			for (j = 0; j < gamut_cfg->tbl_size[i]; j++)
 				writel_relaxed((u32)gamut_cfg->g_tbl[i][j],
 						addr);
+#ifdef CONFIG_SHDISP /* CUST_ID_00019 */
+			j = 0;
+			while (j < gamut_cfg->tbl_size[i]) {
+				GAMUT_CFG_TBL_DUMP('G', i, gamut_cfg->g_tbl[i], gamut_cfg->tbl_size[i], j);
+				j += 0x10;
+			}
+#endif /* CONFIG_SHDISP */
 			addr += 4;
 		}
 		for (i = 0; i < MDP_GAMUT_TABLE_NUM; i++) {
 			for (j = 0; j < gamut_cfg->tbl_size[i]; j++)
 				writel_relaxed((u32)gamut_cfg->b_tbl[i][j],
 						addr);
+#ifdef CONFIG_SHDISP /* CUST_ID_00019 */
+			j = 0;
+			while (j < gamut_cfg->tbl_size[i]) {
+				GAMUT_CFG_TBL_DUMP('B', i, gamut_cfg->b_tbl[i], gamut_cfg->tbl_size[i], j);
+				j += 0x10;
+			}
+#endif /* CONFIG_SHDISP */
 			addr += 4;
 		}
 		if (gamut_cfg->gamut_first)
@@ -582,6 +643,12 @@ static void pp_pa_config(unsigned long flags, char __iomem *addr,
 {
 	if (flags & PP_FLAGS_DIRTY_PA) {
 		if (pa_config->flags & MDP_PP_OPS_WRITE) {
+#ifdef CONFIG_SHDISP /* CUST_ID_00019 */
+			pr_debug("pa_config->hue_adj :0x%03x\n", pa_config->hue_adj);
+			pr_debug("pa_config->sat_adj :0x%04x\n", pa_config->sat_adj);
+			pr_debug("pa_config->val_adj :0x%02x\n", pa_config->val_adj);
+			pr_debug("pa_config->cont_adj:0x%02x\n", pa_config->cont_adj);
+#endif /* CONFIG_SHDISP */
 			writel_relaxed(pa_config->hue_adj, addr);
 			addr += 4;
 			writel_relaxed(pa_config->sat_adj, addr);
@@ -810,6 +877,12 @@ static void pp_sharp_config(char __iomem *addr,
 				struct mdp_sharp_cfg *sharp_config)
 {
 	if (sharp_config->flags & MDP_PP_OPS_WRITE) {
+#ifdef CONFIG_SHDISP /* CUST_ID_00019 */
+		pr_debug("sharp_config->strength:   0x%03x\n", sharp_config->strength);
+		pr_debug("sharp_config->edge_thr:   0x%03x\n", sharp_config->edge_thr);
+		pr_debug("sharp_config->smooth_thr: 0x%03x\n", sharp_config->smooth_thr);
+		pr_debug("sharp_config->noise_thr:  0x%02x\n", sharp_config->noise_thr);
+#endif /* CONFIG_SHDISP */
 		writel_relaxed(sharp_config->strength, addr);
 		addr += 4;
 		writel_relaxed(sharp_config->edge_thr, addr);
@@ -1464,6 +1537,9 @@ static int pp_histogram_setup(u32 *op, u32 block, struct mdss_mdp_mixer *mix)
 	if (hist_info->col_en) {
 		*op |= op_flags;
 		col_state = hist_info->col_state;
+#ifdef CONFIG_SHDISP /* CUST_ID_00051 */
+		if (hist_info->frame_cnt)
+#endif /* CONFIG_SHDISP */
 		if (col_state == HIST_IDLE) {
 			/* Kick off collection */
 			writel_relaxed(1, base + kick_base);
@@ -2588,6 +2664,37 @@ static void pp_read_igc_lut(struct mdp_igc_lut_data *cfg,
 		cfg->c2_data[i] = readl_relaxed(addr) & 0xFFF;
 }
 
+#ifdef CONFIG_SHDISP /* CUST_ID_00026 */
+static void pp_read_specified_igc_lut(struct mdp_specified_igc_lut_data *cfg,
+				char __iomem *addr, u32 blk_idx)
+{
+	u32 data;
+
+	/* INDEX_UPDATE & VALUE_UPDATEN */
+	data = (3 << 24) | (((~(1 << blk_idx)) & 0x7) << 28) | ((cfg->index & 0xFF) << 16);
+	writel_relaxed(data, addr);
+	cfg->c0_data = readl_relaxed(addr) & 0xFFF;
+
+	addr += 0x4;
+	writel_relaxed(data, addr);
+	cfg->c1_data = readl_relaxed(addr) & 0xFFF;
+
+	addr += 0x4;
+	writel_relaxed(data, addr);
+	cfg->c2_data = readl_relaxed(addr) & 0xFFF;
+}
+
+static void pp_read_specified_igc_lut_cached(struct mdp_specified_igc_lut_data *cfg)
+{
+	u32 disp_num;
+
+	disp_num = cfg->block - MDP_LOGICAL_BLOCK_DISP_0;
+	cfg->c0_data = mdss_pp_res->igc_disp_cfg[disp_num].c0_c1_data[cfg->index] & 0xFFF;
+	cfg->c1_data = (mdss_pp_res->igc_disp_cfg[disp_num].c0_c1_data[cfg->index] >> 16) & 0xFFF;
+	cfg->c2_data = mdss_pp_res->igc_disp_cfg[disp_num].c2_data[cfg->index] & 0xFFF;
+}
+#endif /* CONFIG_SHDISP */
+
 static void pp_update_igc_lut(struct mdp_igc_lut_data *cfg,
 				char __iomem *addr, u32 blk_idx)
 {
@@ -2638,6 +2745,41 @@ int mdss_mdp_limited_lut_igc_config(struct mdss_mdp_ctl *ctl)
 					copy_from_kernel);
 	return ret;
 }
+
+#ifdef CONFIG_SHDISP /* CUST_ID_00038 */
+static u32 igc_c0_c1_data[IGC_LUT_ENTRIES];
+static u32 igc_c2_data[IGC_LUT_ENTRIES];
+int mdss_mdp_pp_igc_init(void)
+{
+	int ret = 0;
+	u32 copyback = 0;
+	u32 copy_from_kernel = 1;
+	struct mdp_igc_lut_data config;
+	int i;
+	struct shdisp_igc_lut* igc_lut_diff;
+
+	config.len = IGC_LUT_ENTRIES;
+	config.ops = MDP_PP_OPS_WRITE | MDP_PP_OPS_ENABLE;
+	config.block = MDP_LOGICAL_BLOCK_DISP_0;
+	igc_lut_diff = shdisp_api_get_igc_lut();
+	for (i = 0; i < IGC_LUT_ENTRIES; i++) {
+		// c0:G, c1:B, c2:R
+		if (i == 0) {
+			igc_c0_c1_data[i] = igc_lut_diff->g_data[i] | (igc_lut_diff->b_data[i] << 16);
+			igc_c2_data[i]    = igc_lut_diff->r_data[i];
+		} else {
+			igc_c0_c1_data[i] = igc_c0_c1_data[i - 1] + (igc_lut_diff->g_data[i] | (igc_lut_diff->b_data[i] << 16));
+			igc_c2_data[i]    = igc_c2_data[i - 1] + igc_lut_diff->r_data[i];
+		}
+	}
+	config.c0_c1_data = igc_c0_c1_data;
+	config.c2_data    = igc_c2_data;
+
+	ret = mdss_mdp_igc_lut_config(&config, &copyback,
+					copy_from_kernel);
+	return ret;
+}
+#endif /* CONFIG_SHDISP */
 
 int mdss_mdp_igc_lut_config(struct mdp_igc_lut_data *config,
 					u32 *copyback, u32 copy_from_kernel)
@@ -2735,6 +2877,55 @@ igc_config_exit:
 	mutex_unlock(&mdss_pp_mutex);
 	return ret;
 }
+
+#ifdef CONFIG_SHDISP /* CUST_ID_00026 */
+int mdss_mdp_specified_igc_lut_config(struct mdp_specified_igc_lut_data *config)
+{
+	int ret = 0;
+	u32 tbl_idx, disp_num, dspp_num = 0;
+	char __iomem *igc_addr;
+	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
+
+	if ((config->block < MDP_LOGICAL_BLOCK_DISP_0) ||
+		(config->block >= MDP_BLOCK_MAX))
+		return -EINVAL;
+
+	if (config->index > IGC_LUT_ENTRIES)
+		return -EINVAL;
+
+	mutex_lock(&mdss_pp_mutex);
+	disp_num = config->block - MDP_LOGICAL_BLOCK_DISP_0;
+
+	if (config->ops & MDP_PP_OPS_READ) {
+		ret = pp_get_dspp_num(disp_num, &dspp_num);
+		if (ret) {
+			pr_err("%s, no dspp connects to disp %d",
+				__func__, disp_num);
+			goto sp_igc_config_exit;
+		}
+		mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
+		if (config->ops & MDP_PP_IGC_FLAG_ROM0)
+			tbl_idx = 1;
+		else if (config->ops & MDP_PP_IGC_FLAG_ROM1)
+			tbl_idx = 2;
+		else
+			tbl_idx = 0;
+		igc_addr = mdata->mdp_base + MDSS_MDP_REG_IGC_DSPP_BASE +
+			(0x10 * tbl_idx);
+		if (mdata->has_no_lut_read)
+			pp_read_specified_igc_lut_cached(config);
+		else
+			pp_read_specified_igc_lut(config, igc_addr, dspp_num);
+		mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false);
+	} else {
+	}
+
+sp_igc_config_exit:
+	mutex_unlock(&mdss_pp_mutex);
+	return ret;
+}
+#endif /* CONFIG_SHDISP */
+
 static void pp_update_gc_one_lut(char __iomem *addr,
 		struct mdp_ar_gc_lut_data *lut_data,
 		uint8_t num_stages)
@@ -2834,6 +3025,70 @@ static int pp_read_argc_lut(struct mdp_pgc_lut_data *config, char __iomem *addr)
 	return ret;
 }
 
+#ifdef CONFIG_SHDISP /* CUST_ID_00026 */
+static void pp_read_specified_gc_one_lut(char __iomem *addr,
+		struct mdp_ar_gc_lut_data *gc_data, uint8_t stage)
+{
+	u32 data;
+
+	/* SEGMENT_UPDATE & VALUE_UPDATEN */
+	data = (3 << 20) | ((stage & 0xF) << 16);
+	writel_relaxed(data, addr);
+	gc_data->x_start = readl_relaxed(addr) & 0xFFF;
+
+	addr += 0x4;
+	writel_relaxed(data, addr);
+	gc_data->slope = readl_relaxed(addr) & 0x7FFF;
+
+	addr += 0x4;
+	writel_relaxed(data, addr);
+	gc_data->offset = readl_relaxed(addr) & 0x7FFF;
+}
+
+static int pp_read_specified_argc_lut(struct mdp_specified_pgc_lut_data *config, char __iomem *addr)
+{
+	int ret = 0;
+	pp_read_specified_gc_one_lut(addr, &config->r_data, config->stage);
+	addr += 0x10;
+	pp_read_specified_gc_one_lut(addr, &config->g_data, config->stage);
+	addr += 0x10;
+	pp_read_specified_gc_one_lut(addr, &config->b_data, config->stage);
+	return ret;
+}
+
+static int pp_read_specified_argc_lut_cached(struct mdp_specified_pgc_lut_data *config)
+{
+	u32 disp_num;
+	struct mdp_pgc_lut_data *pgc_ptr;
+
+	disp_num = PP_BLOCK(config->block) - MDP_LOGICAL_BLOCK_DISP_0;
+	switch (PP_LOCAT(config->block)) {
+	case MDSS_PP_LM_CFG:
+		pgc_ptr = &mdss_pp_res->argc_disp_cfg[disp_num];
+		break;
+	case MDSS_PP_DSPP_CFG:
+		pgc_ptr = &mdss_pp_res->pgc_disp_cfg[disp_num];
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	config->r_data.x_start = pgc_ptr->r_data[config->stage].x_start;
+	config->r_data.slope   = pgc_ptr->r_data[config->stage].slope;
+	config->r_data.offset  = pgc_ptr->r_data[config->stage].offset;
+
+	config->g_data.x_start = pgc_ptr->g_data[config->stage].x_start;
+	config->g_data.slope   = pgc_ptr->g_data[config->stage].slope;
+	config->g_data.offset  = pgc_ptr->g_data[config->stage].offset;
+
+	config->b_data.x_start = pgc_ptr->b_data[config->stage].x_start;
+	config->b_data.slope   = pgc_ptr->b_data[config->stage].slope;
+	config->b_data.offset  = pgc_ptr->b_data[config->stage].offset;
+
+	return 0;
+}
+#endif /* CONFIG_SHDISP */
+
 static int pp_read_argc_lut_cached(struct mdp_pgc_lut_data *config)
 {
 	int i;
@@ -2874,6 +3129,12 @@ static void pp_update_hist_lut(char __iomem *addr,
 				struct mdp_hist_lut_data *cfg)
 {
 	int i;
+#ifdef CONFIG_SHDISP /* CUST_ID_00019 */
+	for (i = 0; i < (ENHIST_LUT_ENTRIES/16); i++) {
+        int j = i*16;
+        pr_debug("cfg->data[%d]:%d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d\n", j, cfg->data[j], cfg->data[j+1], cfg->data[j+2], cfg->data[j+3], cfg->data[j+4], cfg->data[j+5], cfg->data[j+6], cfg->data[j+7], cfg->data[j+8], cfg->data[j+9], cfg->data[j+10], cfg->data[j+11], cfg->data[j+12], cfg->data[j+13], cfg->data[j+14], cfg->data[j+15]);
+    }
+#endif /* CONFIG_SHDISP */
 	for (i = 0; i < ENHIST_LUT_ENTRIES; i++)
 		writel_relaxed(cfg->data[i], addr);
 	/* swap */
@@ -2882,6 +3143,46 @@ static void pp_update_hist_lut(char __iomem *addr,
 	else
 		writel_relaxed(1, addr + 16);
 }
+
+#ifdef CONFIG_SHDISP /* CUST_ID_00038 */
+int mdss_mdp_pp_argc_init(void)
+{
+	int ret = 0;
+	int i;
+	struct shdisp_argc_lut* argc_lut;
+	struct mdp_pgc_lut_data *pgc_ptr;
+
+	mutex_lock(&mdss_pp_mutex);
+
+	pgc_ptr = &mdss_pp_res->pgc_disp_cfg[0];
+	mdss_pp_res->pp_disp_flags[0] |= PP_FLAGS_DIRTY_PGC;
+
+	argc_lut = shdisp_api_get_argc_lut();
+	for (i = 0; i < GC_LUT_SEGMENTS; i++) {
+		mdss_pp_res->gc_lut_r[0][i].x_start = argc_lut->red[i][0];
+		mdss_pp_res->gc_lut_r[0][i].slope   = argc_lut->red[i][1];
+		mdss_pp_res->gc_lut_r[0][i].offset  = argc_lut->red[i][2];
+		mdss_pp_res->gc_lut_g[0][i].x_start = argc_lut->green[i][0];
+		mdss_pp_res->gc_lut_g[0][i].slope   = argc_lut->green[i][1];
+		mdss_pp_res->gc_lut_g[0][i].offset  = argc_lut->green[i][2];
+		mdss_pp_res->gc_lut_b[0][i].x_start = argc_lut->blue[i][0];
+		mdss_pp_res->gc_lut_b[0][i].slope   = argc_lut->blue[i][1];
+		mdss_pp_res->gc_lut_b[0][i].offset	= argc_lut->blue[i][2];
+	}
+
+	pgc_ptr->block = MDP_LOGICAL_BLOCK_DISP_0 | MDSS_PP_DSPP_CFG;
+	pgc_ptr->flags = MDP_PP_OPS_WRITE | MDP_PP_OPS_ENABLE;
+	pgc_ptr->num_r_stages = GC_LUT_SEGMENTS;
+	pgc_ptr->num_g_stages = GC_LUT_SEGMENTS;
+	pgc_ptr->num_b_stages = GC_LUT_SEGMENTS;
+	pgc_ptr->r_data = &mdss_pp_res->gc_lut_r[0][0];
+	pgc_ptr->g_data = &mdss_pp_res->gc_lut_g[0][0];
+	pgc_ptr->b_data = &mdss_pp_res->gc_lut_b[0][0];
+
+	mutex_unlock(&mdss_pp_mutex);
+	return ret;
+}
+#endif /* CONFIG_SHDISP */
 
 int mdss_mdp_argc_config(struct mdp_pgc_lut_data *config,
 				u32 *copyback)
@@ -3025,6 +3326,62 @@ argc_config_exit:
 	mutex_unlock(&mdss_pp_mutex);
 	return ret;
 }
+
+#ifdef CONFIG_SHDISP /* CUST_ID_00026 */
+int mdss_mdp_specified_argc_lut_config(struct mdp_specified_pgc_lut_data *config)
+{
+	int ret = 0;
+	u32 disp_num, dspp_num = 0;
+	char __iomem *argc_addr = 0;
+	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
+
+	if ((PP_BLOCK(config->block) < MDP_LOGICAL_BLOCK_DISP_0) ||
+		(PP_BLOCK(config->block) >= MDP_BLOCK_MAX))
+		return -EINVAL;
+
+	if (config->stage > GC_LUT_SEGMENTS)
+		return -EINVAL;
+
+	mutex_lock(&mdss_pp_mutex);
+
+	disp_num = PP_BLOCK(config->block) - MDP_LOGICAL_BLOCK_DISP_0;
+	switch (PP_LOCAT(config->block)) {
+	case MDSS_PP_LM_CFG:
+		argc_addr = mdss_mdp_get_mixer_addr_off(dspp_num) +
+			MDSS_MDP_REG_LM_GC_LUT_BASE;
+		break;
+	case MDSS_PP_DSPP_CFG:
+		argc_addr = mdss_mdp_get_dspp_addr_off(dspp_num) +
+					MDSS_MDP_REG_DSPP_GC_BASE;
+		break;
+	default:
+		goto sp_argc_config_exit;
+		break;
+	}
+
+
+	if (config->flags & MDP_PP_OPS_READ) {
+		ret = pp_get_dspp_num(disp_num, &dspp_num);
+		if (ret) {
+			pr_err("%s, no dspp connects to disp %d",
+				__func__, disp_num);
+			goto sp_argc_config_exit;
+		}
+		mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
+		if (mdata->has_no_lut_read)
+			pp_read_specified_argc_lut_cached(config);
+		else
+			pp_read_specified_argc_lut(config, argc_addr);
+		mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false);
+	} else {
+	}
+
+sp_argc_config_exit:
+	mutex_unlock(&mdss_pp_mutex);
+	return ret;
+}
+#endif /* CONFIG_SHDISP */
+
 int mdss_mdp_hist_lut_config(struct mdp_hist_lut_data *config,
 					u32 *copyback)
 {
@@ -3311,6 +3668,11 @@ static int pp_histogram_enable(struct pp_hist_col_info *hist_info,
 	hist_info->col_en = true;
 	spin_unlock_irqrestore(&hist_info->hist_lock, flag);
 	hist_info->frame_cnt = req->frame_cnt;
+#ifdef CONFIG_SHDISP /* CUST_ID_00051 */
+	if (req->frame_cnt == 0) {
+		req->frame_cnt = 1;
+	}
+#endif /* CONFIG_SHDISP */
 	INIT_COMPLETION(hist_info->comp);
 	INIT_COMPLETION(hist_info->first_kick);
 	hist_info->hist_cnt_read = 0;
@@ -3413,6 +3775,9 @@ int mdss_mdp_hist_start(struct mdp_histogram_start_req *req)
 		}
 	}
 hist_stop_clk:
+#ifdef CONFIG_SHDISP /* CUST_ID_00060 */
+	usleep(MDP_HIST_START_SLEEP);
+#endif /* CONFIG_SHDISP */
 	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false);
 hist_exit:
 	return ret;
@@ -3658,10 +4023,12 @@ int mdss_mdp_hist_intr_setup(struct mdss_intr *intr, int type)
 
 exit:
 	spin_unlock_irqrestore(&intr->lock, flag);
+#ifndef CONFIG_SHDISP /* CUST_ID_00051 */
 	if (req_clk < 0)
 		mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false);
 	else if (req_clk > 0)
 		mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
+#endif /* CONFIG_SHDISP */
 
 	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false);
 	return ret;
@@ -3690,6 +4057,11 @@ static int pp_hist_collect(struct mdp_histogram_data *hist,
 	if (hist_info->col_state != HIST_READY) {
 		spin_unlock_irqrestore(&hist_info->hist_lock, flag);
 		timeout = HIST_WAIT_TIMEOUT(hist_info->frame_cnt);
+#ifdef CONFIG_SHDISP /* CUST_ID_00051 */
+		if (timeout == 0) {
+			timeout = HIST_WAIT_TIMEOUT(2);
+		}
+#endif /* CONFIG_SHDISP */
 		mutex_unlock(&hist_info->hist_mutex);
 		if (PP_LOCAT(hist->block) == MDSS_PP_SSPP_CFG) {
 			res = container_of(hist_info, struct mdss_pipe_pp_res,
@@ -3767,6 +4139,21 @@ hist_collect_exit:
 	return ret;
 }
 
+#ifdef CONFIG_SHDISP /* CUST_ID_00051 */
+static struct mdss_mdp_ctl *mdss_mdp_hist_get_ctl(u32 fb_num)
+{
+	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
+	struct mdss_mdp_ctl *ctl;
+	int i;
+	for (i = 0; i < mdata->nctl; i++) {
+		ctl = mdata->ctl_off + i;
+		if (ctl->power_on && ctl->mfd && ctl->mfd->index == fb_num) {
+			return ctl;
+		}
+	}
+	return NULL;
+}
+#endif /* CONFIG_SHDISP */
 int mdss_mdp_hist_collect(struct mdp_histogram_data *hist)
 {
 	int i, j, off, ret = 0, temp_ret = 0;
@@ -3823,6 +4210,35 @@ int mdss_mdp_hist_collect(struct mdp_histogram_data *hist)
 					mdata->mixer_intf[dspp_num].height);
 			if (ret)
 				temp_ret = ret;
+#ifdef CONFIG_SHDISP /* CUST_ID_00051 */
+			hist_info = &mdss_pp_res->dspp_hist[dspp_num];
+			if (hist_info->frame_cnt == 0) {
+				struct mdss_mdp_ctl *ctl = mdss_mdp_hist_get_ctl(disp_num);
+				mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
+				spin_lock_irqsave(&hist_info->hist_lock, flag);
+				if (hist_info->col_state == HIST_READY) {
+					u32 sum;
+					pr_debug("old data exist, read to clear\n");
+					spin_unlock_irqrestore(&hist_info->hist_lock, flag);
+					sum = pp_hist_read(ctl_base + 0x1C, hist_info);
+					spin_lock_irqsave(&hist_info->hist_lock, flag);
+					pr_debug("done(%d)\n", sum);
+					hist_info->col_state = HIST_IDLE;
+				}
+				if (hist_info->col_state == HIST_IDLE) {
+					writel_relaxed(1, ctl_base); /* kick histogram here (need flush) */
+					mdss_mdp_ctl_write(ctl, MDSS_MDP_REG_CTL_FLUSH, BIT(13 + dspp_num));
+					wmb();
+					hist_info->col_state = HIST_START;
+					pr_debug("kick histogram\n");
+				} else {
+					pr_debug("unexpected state %d\n", hist_info->col_state);
+				}
+				spin_unlock_irqrestore(&hist_info->hist_lock, flag);
+				ret = pp_hist_collect(hist, hists[i], ctl_base, exp_sum);
+				mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false);
+			} else
+#endif /* CONFIG_SHDISP */
 			ret = pp_hist_collect(hist, hists[i], ctl_base,
 								exp_sum);
 			if (ret)
@@ -4046,6 +4462,9 @@ void mdss_mdp_hist_intr_done(u32 isr)
 		/* Histogram Done Interrupt */
 		if (hist_info && (isr_blk & 0x1) && (hist_info->col_en)) {
 			spin_lock(&hist_info->hist_lock);
+#ifdef CONFIG_SHDISP /* CUST_ID_00051 */
+			pr_debug("HISTOGRAM INTR HERE, READ=%d\n", hist_info->read_request);
+#endif /* CONFIG_SHDISP */
 			hist_info->col_state = HIST_READY;
 			spin_unlock(&hist_info->hist_lock);
 			if (hist_info->read_request == 1) {

@@ -884,6 +884,28 @@ int msm_fb_writeback_set_secure(struct fb_info *info, int enable)
 }
 EXPORT_SYMBOL(msm_fb_writeback_set_secure);
 
+#ifdef CONFIG_SHDISP /* CUST_ID_00040 */
+/**
+ * msm_fb_set_wfd_iommu_flag() - Power ON/OFF mdp clock
+ * @enable - true/false to Power ON/OFF mdp clock
+ *
+ * V4L2-WFD driver will call it to enable mdp clock at start of
+ * mdp_mmap/mdp_munmap API and to disable mdp clock at end of these
+ * API's to ensure iommu is in proper state while wfd driver map/un-map
+ * any buffers.
+ */
+
+int msm_fb_set_wfd_iommu_flag(int enable) {
+	if (enable)
+		mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_ON, false);
+	else
+		mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false);
+
+	return 0;
+}
+EXPORT_SYMBOL(msm_fb_set_wfd_iommu_flag);
+#endif /* CONFIG_SHDISP */
+
 /**
  * msm_fb_writeback_iommu_ref() - Add/Remove vote on MDSS IOMMU being attached.
  * @enable - true adds vote on MDSS IOMMU, false removes the vote.

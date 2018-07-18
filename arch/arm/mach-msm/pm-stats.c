@@ -242,6 +242,36 @@ write_proc_failed:
 }
 #undef MSM_PM_STATS_RESET
 
+#ifdef CONFIG_SH_SLEEP_LOG
+static int64_t sh_get_pm_stats(int id)
+{
+	struct msm_pm_time_stats *stats;
+	int64_t result = 0;
+	unsigned long flags;
+
+	spin_lock_irqsave(&msm_pm_stats_lock, flags);
+
+	if (id == MSM_PM_STAT_SUSPEND) {
+		stats = &suspend_stats;
+	} else {
+		stats = per_cpu(msm_pm_stats, 0).stats;
+		if (!stats[id].enabled)
+			goto add_bail;
+		stats = &stats[id];
+	}
+	result = stats->total_time;
+add_bail:
+	spin_unlock_irqrestore(&msm_pm_stats_lock, flags);
+	return result;
+}
+int64_t sh_get_pm_stats_suspend(void){
+	return sh_get_pm_stats(MSM_PM_STAT_SUSPEND);
+}
+int64_t sh_get_pm_stats_idle(void){
+	return sh_get_pm_stats(MSM_PM_STAT_IDLE_POWER_COLLAPSE);
+}
+#endif
+
 static int msm_pm_stats_open(struct inode *inode, struct file *file)
 {
 	return single_open(file, msm_pm_stats_show, NULL);

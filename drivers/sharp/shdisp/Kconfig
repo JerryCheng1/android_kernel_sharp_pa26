@@ -1,0 +1,12 @@
+#
+# LCDC Configuration
+#
+
+menu "LCDC Configuration"
+
+config USES_SHLCDC
+	bool "There is USES_SHLCDC"
+	default n
+
+
+endmenu

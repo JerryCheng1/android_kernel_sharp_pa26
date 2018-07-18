@@ -35,6 +35,9 @@ config SPI_DEBUG
 	  Say "yes" to enable debug messaging (like dev_dbg and pr_debug),
 	  sysfs, and debugfs support in SPI controller and protocol drivers.
 
+config SPI_CS_CHANGE_SH
+	bool "SPI customize cs_change"
+	default y
 #
 # MASTER side ... talking to discrete SPI slave chips including microcontrollers
 #

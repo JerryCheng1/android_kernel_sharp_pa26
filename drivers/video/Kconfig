@@ -2353,6 +2353,22 @@ config FB_PRE_INIT_FB
 	  Select this option if display contents should be inherited as set by
 	  the bootloader.
 
+config SHDISP
+	bool "SHDISP"
+	default n
+
+config SHDISP_BDIC_71Y
+	bool "IR2E71Y6 support"
+	default n
+
+config SHDISP_PANEL_ANDY
+	bool 'SH panel type Andy'
+	default n
+
+config SHDISP_PANEL_ARIA
+	bool 'SH panel type Aria'
+	default n
+
 config FB_MX3
 	tristate "MX3 Framebuffer support"
 	depends on FB && MX3_IPU

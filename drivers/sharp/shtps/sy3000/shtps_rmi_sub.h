@@ -1,0 +1,135 @@
+/* drivers/sharp/shtps/sy3000/shtps_rmi_sub.h
+ *
+ * Copyright (c) 2014, Sharp. All rights reserved.
+ *
+ * This software is licensed under the terms of the GNU General Public
+ * License version 2, as published by the Free Software Foundation, and
+ * may be copied, distributed, and modified under those terms.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ */
+#ifndef __SHTPS_SUB_H__
+#define __SHTPS_SUB_H__
+/* -------------------------------------------------------------------------- */
+#include <linux/wakelock.h>
+#include <linux/slab.h>
+#include <linux/pm_qos.h>
+
+#include <linux/mfd/pm8xxx/pm8921.h>
+
+/* -------------------------------------------------------------------------- */
+
+#include "shtps_rmi.h"
+/* -------------------------------------------------------------------------- */
+#ifdef SHTPS_SEND_SHTERM_EVENT_ENABLE
+	#include <sharp/shterm_k.h>
+	void shtps_send_shterm_event(int event_num);
+#endif
+
+/* -------------------------------------------------------------------------- */
+#if defined(SHTPS_PROXIMITY_SUPPORT_ENABLE)
+	int shtps_proximity_state_check(struct shtps_rmi_spi *ts);
+	int shtps_proximity_check(struct shtps_rmi_spi *ts);
+#endif /* SHTPS_PROXIMITY_SUPPORT_ENABLE */
+
+/* -------------------------------------------------------------------------- */
+#define SHTPS_PERFORMANCE_CHECK_STATE_START	(0)
+#define SHTPS_PERFORMANCE_CHECK_STATE_CONT	(1)
+#define SHTPS_PERFORMANCE_CHECK_STATE_END	(2)
+#if defined(SHTPS_PERFORMANCE_CHECK_ENABLE)
+	void shtps_performance_check_init(void);
+	void shtps_performance_check(int state);
+#else
+	#define	shtps_performance_check_init()
+	#define	shtps_performance_check(A)
+#endif	/* SHTPS_PERFORMANCE_CHECK_ENABLE */
+
+/* -------------------------------------------------------------------------- */
+#if defined(SHTPS_CPU_CLOCK_CONTROL_ENABLE)
+	#include <linux/cpufreq.h>
+	#include <linux/notifier.h>
+
+	struct shtps_cpu_clock_ctrl_info{
+//		struct perf_lock			perf_lock;
+		struct delayed_work			perf_lock_disable_delayed_work;
+		//int							perf_lock_enable_time_ms;
+		int							report_event;
+		struct shtps_rmi_spi		*ts_p;
+	};
+
+	void shtps_perflock_register_notifier(void);
+	void shtps_perflock_unregister_notifier(void);
+	void shtps_perflock_enable_start(struct shtps_rmi_spi *ts, u8 event);
+	void shtps_perflock_sleep(struct shtps_rmi_spi *ts);
+	void shtps_perflock_init(struct shtps_rmi_spi *ts);
+	void shtps_perflock_deinit(struct shtps_rmi_spi *ts);
+	void shtps_perflock_set_event(struct shtps_rmi_spi *ts, u8 event);
+#else
+	#define shtps_perflock_register_notifier()
+	#define shtps_perflock_unregister_notifier()
+	#define shtps_perflock_enable_start(A, B)
+	#define shtps_perflock_sleep(A)
+	#define shtps_perflock_init(A)
+	#define shtps_perflock_deinit(A)
+	#define shtps_perflock_set_event(A, B)
+#endif /* SHTPS_CPU_CLOCK_CONTROL_ENABLE */
+
+/* -------------------------------------------------------------------------- */
+#if defined(SHTPS_CPU_IDLE_SLEEP_CONTROL_ENABLE)
+	struct shtps_cpu_idle_sleep_ctrl_info{
+		struct pm_qos_request		qos_cpu_latency;
+		int							wake_lock_idle_state;
+	};
+
+	void shtps_wake_lock_idle(struct shtps_rmi_spi *ts);
+	void shtps_wake_unlock_idle(struct shtps_rmi_spi *ts);
+	void shtps_cpu_idle_sleep_wake_lock_init( struct shtps_rmi_spi *ts );
+	void shtps_cpu_idle_sleep_wake_lock_deinit( struct shtps_rmi_spi *ts );
+#else
+	#define shtps_wake_lock_idle(A)
+	#define shtps_wake_unlock_idle(A)
+	#define shtps_cpu_idle_sleep_wake_lock_init(A)
+	#define shtps_cpu_idle_sleep_wake_lock_deinit(A)
+#endif /* SHTPS_CPU_IDLE_SLEEP_CONTROL_ENABLE */
+
+/* -------------------------------------------------------------------------- */
+#if defined(SHTPS_CPU_SLEEP_CONTROL_FOR_FWUPDATE_ENABLE)
+	struct shtps_cpu_sleep_ctrl_fwupdate_info{
+		struct wake_lock			wake_lock_for_fwupdate;
+		struct pm_qos_request		qos_cpu_latency_for_fwupdate;
+		int							wake_lock_for_fwupdate_state;
+	};
+
+	void shtps_wake_lock_for_fwupdate(struct shtps_rmi_spi *ts);
+	void shtps_wake_unlock_for_fwupdate(struct shtps_rmi_spi *ts);
+	void shtps_fwupdate_wake_lock_init( struct shtps_rmi_spi *ts );
+	void shtps_fwupdate_wake_lock_deinit( struct shtps_rmi_spi *ts );
+#else
+	#define shtps_wake_lock_for_fwupdate(A)
+	#define shtps_wake_unlock_for_fwupdate(A)
+	#define shtps_fwupdate_wake_lock_init(A)
+	#define shtps_fwupdate_wake_lock_deinit(A)
+#endif /* SHTPS_CPU_SLEEP_CONTROL_FOR_FWUPDATE_ENABLE */
+
+/* -------------------------------------------------------------------------- */
+#if defined( SHTPS_TPIN_CHECK_ENABLE ) || defined( SHTPS_CHECK_CRC_ERROR_ENABLE )
+	int shtps_tpin_enable_check(struct shtps_rmi_spi *ts);
+#endif /* SHTPS_TPIN_CHECK_ENABLE || SHTPS_CHECK_CRC_ERROR_ENABLE*/
+
+/* -------------------------------------------------------------------------- */
+struct shtps_req_msg;
+
+void shtps_func_request_async( struct shtps_rmi_spi *ts, int event);
+int shtps_func_request_sync( struct shtps_rmi_spi *ts, int event);
+int shtps_func_async_init( struct shtps_rmi_spi *ts);
+void shtps_func_async_deinit( struct shtps_rmi_spi *ts);
+
+
+/* -------------------------------------------------------------------------- */
+/* -------------------------------------------------------------------------- */
+/* -------------------------------------------------------------------------- */
+#endif	/* __SHTPS_SUB_H__ */

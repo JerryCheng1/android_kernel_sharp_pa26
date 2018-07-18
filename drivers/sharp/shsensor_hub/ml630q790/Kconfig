@@ -1,0 +1,179 @@
+#
+# SensorHub drivers configuration
+#
+
+menuconfig SHUB
+	bool "SensorHub Support"
+	depends on INPUT && (I2C||SPI)
+	default y
+	---help---
+	  Say Y here to get to see options for sensor hub interface.
+
+config SHUB_ML630Q790
+	bool "LAPIS Semicomductor ML610Q793 SensorHub Micom"
+	depends on SHUB
+	default y
+	help
+	 --- help ---
+	 If you say yes here you get support for SHUB_ML630Q790.
+
+config HOSTIF_SPI
+	bool "HostI/F use the SPI"
+	depends on SHUB_ML630Q790
+	default y
+	help
+	 --- help ---
+	 Not tested.
+
+config HOSTIF_I2C
+	bool "HostI/F use the I2C"
+	depends on SHUB_ML630Q790
+	default n
+	help
+	 --- help ---
+	 Please not set at the same time as SPI.
+
+config ML630Q790_DEBUG
+	bool "Output debug message"
+	depends on SHUB_ML630Q790
+	default n
+	help
+	 --- help ---
+	 If you say yes here you output debug message.
+
+config ACC_SENSOR
+	bool "Support accelometer"
+	depends on SHUB_ML630Q790
+	default y
+	help
+	 --- help ---
+	 If you say yes here you get support for accelometer.
+
+config GYRO_SENSOR
+	bool "Support gyroscope"
+	depends on SHUB_ML630Q790
+	default y
+	help
+	 --- help ---
+	 If you say yes here you get support for gyroscope.
+
+config MAG_SENSOR
+	bool "Support magnetic filed sensor"
+	depends on SHUB_ML630Q790
+	default y
+	help
+	 --- help ---
+	 If you say yes here you get support for magnetic filed sensor.
+
+config ALS_SENSOR
+	bool "Support ambient light sensor"
+	depends on SHUB_ML630Q790
+	default n
+	help
+	 --- help ---
+	 If you say yes here you get support for ambient light sensor.
+
+config PS_SENSOR
+	bool "Support proximity sensor"
+	depends on SHUB_ML630Q790
+	default n
+	help
+	 --- help ---
+	 If you say yes here you get support for proximity sensor.
+
+config ELECTRODE
+	bool "Support Electrode"
+	depends on SHUB_ML630Q790
+	default n
+	help
+	 --- help ---
+	 If you say yes here you get support for Electrode Detection.
+
+config ORI_SENSOR
+	bool "Support orientation sensor"
+	depends on SHUB_ML630Q790
+	default y
+	help
+	 --- help ---
+	 If you say yes here you get support for orientation sensor.
+
+config LINEACC_SENSOR
+	bool "Support liner acc sensor"
+	depends on SHUB_ML630Q790
+	default y
+	help
+	 --- help ---
+	 If you say yes here you get support for liner acc sensor.
+
+config GAMEROT_SENSOR
+	bool "Support Game rotation sensor"
+	depends on SHUB_ML630Q790
+	default y
+	help
+	 --- help ---
+	 If you say yes here you get support for Game rotation sensor.
+
+config GRAV_SENSOR
+	bool "Support gravity sensor"
+	depends on SHUB_ML630Q790
+	default y
+	help
+	 --- help ---
+	 If you say yes here you get support for gravity sensor.
+
+config GYROUNC_SENSOR
+	bool "Support Gyro uncalibration sensor"
+	depends on SHUB_ML630Q790
+	default y
+	help
+	 --- help ---
+	 If you say yes here you get support for Gyro uncalibration sensor.
+
+config MAGROT_SENSOR
+	bool "Support Mag rotation sensor"
+	depends on SHUB_ML630Q790
+	default y
+	help
+	 --- help ---
+	 If you say yes here you get support for Mag rotation sensor.
+
+config MAGUNC_SENSOR
+	bool "Support Mag uncalibration sensor"
+	depends on SHUB_ML630Q790
+	default y
+	help
+	 --- help ---
+	 If you say yes here you get support for Mag uncalibration sensor.
+
+config ROTVEC_SENSOR
+	bool "Support Rotation vec sensor"
+	depends on SHUB_ML630Q790
+	default y
+	help
+	 --- help ---
+	 If you say yes here you get support for Rotation vec sensor.
+
+config PEDO_SENSOR
+	bool "Support Pedo sensor"
+	depends on SHUB_ML630Q790
+	default y
+	help
+	 --- help ---
+	 If you say yes here you get support for Pedo sensor.
+
+config PEDODEC_SENSOR
+	bool "Support Pedo dect sensor"
+	depends on SHUB_ML630Q790
+	default y
+	help
+	 --- help ---
+	 If you say yes here you get support for Pedo dect sensor.
+
+config SIGNIFICANT_MOTION
+	bool "Support Significant motion"
+	depends on SHUB_ML630Q790
+	default y
+	help
+	 --- help ---
+	 If you say yes here you get support for Significant motion.
+

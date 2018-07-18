@@ -125,6 +125,9 @@ obj-y				+= platform/
 obj-y				+= ieee802154/
 #common clk code
 obj-y				+= clk/
+obj-$(CONFIG_SHSYS_CUST)	+= sharp/shsys/
+obj-$(CONFIG_SHBOOT_CUST)	+= sharp/shboot/
+obj-$(CONFIG_SHDISP)  += sharp/shdisp/
 
 obj-$(CONFIG_HWSPINLOCK)	+= hwspinlock/
 obj-$(CONFIG_NFC)		+= nfc/
@@ -145,3 +148,7 @@ obj-$(CONFIG_CORESIGHT)		+= coresight/
 
 obj-$(CONFIG_BIF)		+= bif/
 obj-$(CONFIG_SENSORS)		+= sensors/
+obj-$(CONFIG_SENSORS_PROXIMITY) += sharp/proximity/
+obj-$(CONFIG_TOUCHSCREEN_SHTPS) += sharp/shtps/
+obj-$(CONFIG_SHUB)		+= sharp/shsensor_hub/ml630q790/
+obj-$(CONFIG_SHVIBRATOR_LINEAR) += sharp/shvibrator/

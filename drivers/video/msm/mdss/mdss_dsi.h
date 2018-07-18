@@ -156,6 +156,10 @@ enum dsi_lane_map_type {
 #define DSI_BTA_TERM    BIT(1)
 #define DSI_CMD_TERM    BIT(0)
 
+#ifdef CONFIG_SHDISP  /* CUST_ID_00054 */
+#define DSI_PANEL_DET   BIT(31)
+#endif /* CONFIG_SHDISP */
+
 extern struct device dsi_dev;
 extern u32 dsi_irq;
 extern struct mdss_dsi_ctrl_pdata *ctrl_list[];
@@ -352,7 +356,11 @@ void mdss_dsi_sw_reset(struct mdss_panel_data *pdata);
 irqreturn_t mdss_dsi_isr(int irq, void *ptr);
 void mdss_dsi_irq_handler_config(struct mdss_dsi_ctrl_pdata *ctrl_pdata);
 
+#ifdef CONFIG_SHDISP /* CUST_ID_00050 */
 void mdss_dsi_set_tx_power_mode(int mode, struct mdss_panel_data *pdata);
+#else  /* CONFIG_SHDISP */
+void mipi_set_tx_power_mode(int mode, struct mdss_panel_data *pdata);
+#endif /* CONFIG_SHDISP */
 int mdss_dsi_clk_div_config(struct mdss_panel_info *panel_info,
 			    int frame_rate);
 int mdss_dsi_clk_init(struct platform_device *pdev,
@@ -385,6 +393,11 @@ int mdss_panel_get_dst_fmt(u32 bpp, char mipi_mode, u32 pixel_packing,
 
 int mdss_dsi_register_recovery_handler(struct mdss_dsi_ctrl_pdata *ctrl,
 		struct mdss_panel_recovery *recovery);
+
+#ifdef CONFIG_SHDISP /* CUST_ID_00041 */
+void mipi_dsi_latency_deny_collapse(void);
+void mipi_dsi_latency_allow_collapse(void);
+#endif /* CONFIG_SHDISP */
 
 static inline bool mdss_dsi_broadcast_mode_enabled(void)
 {
