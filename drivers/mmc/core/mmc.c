@@ -1448,7 +1448,11 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 		 */
 
 		err = mmc_get_ext_csd(card, &ext_csd);
+#ifdef CONFIG_MMC_CUST_SH
+		if (err || ext_csd == NULL)
+#else	/* CONFIG_MMC_CUST_SH */
 		if (err)
+#endif	/* CONFIG_MMC_CUST_SH */
 			goto free_card;
 		card->cached_ext_csd = ext_csd;
 		err = mmc_read_ext_csd(card, ext_csd);

@@ -42,7 +42,17 @@
 #include <mach/mpm.h>
 #include <linux/iopoll.h>
 
+#ifdef CONFIG_MMC_SD_PENDING_RESUME_CUST_SH
+#include <linux/irq.h>
+#include <linux/irqnr.h>
+#include <linux/irqdesc.h>
+#endif /* CONFIG_MMC_SD_PENDING_RESUME_CUST_SH */
+
 #include "sdhci-pltfm.h"
+
+#ifdef CONFIG_MMC_SD_CD_ACTIVE_HIGH_CUST_SH
+#include <sharp/sh_boot_manager.h>
+#endif /* CONFIG_MMC_SD_CD_ACTIVE_HIGH_CUST_SH */
 
 enum sdc_mpm_pin_state {
 	SDC_DAT1_DISABLE,
@@ -346,6 +356,23 @@ enum vdd_io_level {
 	 */
 	VDD_IO_SET_LEVEL,
 };
+
+#ifdef CONFIG_MMC_SD_CUST_SH
+extern int64_t sh_mmc_timer_get_sclk_time(void);
+extern int mmc_cd_get_status(struct mmc_host *host);
+#define SDVDD_ON_TIME_MIN	20
+static int64_t timer_start = 0;
+static int64_t timer_end   = 0;
+static unsigned int sdhci_msm_gpio_flg = 0;
+static int sdpwr_en = 0;
+#endif /* CONFIG_MMC_SD_CUST_SH */
+#ifdef CONFIG_MMC_SD_PENDING_RESUME_CUST_SH
+static int sh_sdhci_msm_sd_pwrirq_num = -1;
+static int sh_sdhci_msm_sd_irq_num = -1;
+
+struct mutex sd_irq_lock;
+bool is_sd_irqs_disabled( void );
+#endif /* CONFIG_MMC_SD_PENDING_RESUME_CUST_SH */
 
 /* MSM platform specific tuning */
 static inline int msm_dll_poll_ck_out_en(struct sdhci_host *host,
@@ -1060,7 +1087,17 @@ static int sdhci_msm_dt_parse_vreg_info(struct device *dev,
 	char prop_name[MAX_PROP_SIZE];
 	struct sdhci_msm_reg_data *vreg;
 	struct device_node *np = dev->of_node;
+#ifdef CONFIG_MMC_SD_CUST_SH
+	struct sdhci_host *host = dev_get_drvdata(dev);
+#endif /* CONFIG_MMC_SD_CUST_SH */
 
+#ifdef CONFIG_MMC_SD_CUST_SH
+	if (!strcmp(mmc_hostname(host->mmc),HOST_MMC_SD)) {
+		if (vreg_name && !strcmp(vreg_name, "vdd")) {
+			return 0;
+		}
+	}
+#endif /* CONFIG_MMC_SD_CUST_SH */
 	snprintf(prop_name, MAX_PROP_SIZE, "%s-supply", vreg_name);
 	if (!of_parse_phandle(np, prop_name, 0)) {
 		dev_info(dev, "No vreg data found for %s\n", vreg_name);
@@ -1365,6 +1402,9 @@ static struct sdhci_msm_pltfm_data *sdhci_msm_populate_pdata(struct device *dev)
 	int clk_table_len;
 	u32 *clk_table = NULL;
 	enum of_gpio_flags flags = OF_GPIO_ACTIVE_LOW;
+#ifdef CONFIG_MMC_SD_CUST_SH
+	struct sdhci_host *host = dev_get_drvdata(dev);
+#endif /* CONFIG_MMC_SD_CUST_SH */
 
 	pdata = devm_kzalloc(dev, sizeof(*pdata), GFP_KERNEL);
 	if (!pdata) {
@@ -1373,8 +1413,23 @@ static struct sdhci_msm_pltfm_data *sdhci_msm_populate_pdata(struct device *dev)
 	}
 
 	pdata->status_gpio = of_get_named_gpio_flags(np, "cd-gpios", 0, &flags);
+#ifdef CONFIG_MMC_SD_CD_ACTIVE_HIGH_CUST_SH
+	if (strncmp(mmc_hostname(host->mmc), HOST_MMC_SD, sizeof(HOST_MMC_SD)) == 0) {
+		if(sh_boot_get_handset()){
+			if (gpio_is_valid(pdata->status_gpio))
+				pdata->caps2 |= MMC_CAP2_CD_ACTIVE_HIGH;
+		}
+		else{
+			printk("%s: This is <EVB>, then not set caps2 <MMC_CAP2_CD_ACTIVE_HIGH>\n",__func__);
+		}
+	}
+	else{
+#endif /* CONFIG_MMC_SD_CD_ACTIVE_HIGH_CUST_SH */
 	if (gpio_is_valid(pdata->status_gpio) & !(flags & OF_GPIO_ACTIVE_LOW))
 		pdata->caps2 |= MMC_CAP2_CD_ACTIVE_HIGH;
+#ifdef CONFIG_MMC_SD_CD_ACTIVE_HIGH_CUST_SH
+	}
+#endif /* CONFIG_MMC_SD_CD_ACTIVE_HIGH_CUST_SH */
 
 	of_property_read_u32(np, "qcom,bus-width", &bus_width);
 	if (bus_width == 8)
@@ -1426,6 +1481,16 @@ static struct sdhci_msm_pltfm_data *sdhci_msm_populate_pdata(struct device *dev)
 		dev_err(dev, "failed parsing gpio data\n");
 		goto out;
 	}
+
+#ifdef CONFIG_MMC_SD_CUST_SH
+	if (!strcmp(mmc_hostname(host->mmc),HOST_MMC_SD)) {
+		sdpwr_en = of_get_named_gpio(np, "sdpwr-gpio", 0);
+		if (!gpio_is_valid(sdpwr_en)) {
+			dev_err(dev, "sdpwr-gpio resource error\n");
+			sdpwr_en = 0;
+		}
+	}
+#endif /* CONFIG_MMC_SD_CUST_SH */
 
 	len = of_property_count_strings(np, "qcom,bus-speed-mode");
 
@@ -1995,6 +2060,54 @@ static irqreturn_t sdhci_msm_sdiowakeup_irq(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+#ifdef CONFIG_MMC_SD_CUST_SH
+static void
+sdhci_msm_set_enpwr_gpio(struct sdhci_host *host, bool enable)
+{
+	int rc;
+
+	if (!sdpwr_en)
+		return;
+
+	if (enable) {
+		if (!strcmp(mmc_hostname(host->mmc),HOST_MMC_SD)) {
+			timer_end = sh_mmc_timer_get_sclk_time();
+			if (SDVDD_ON_TIME_MIN > ((timer_end - timer_start) / 1000000)) {
+				msleep(SDVDD_ON_TIME_MIN);
+			}
+		}
+		rc = gpio_request(sdpwr_en, "sdpwr_en_gpio");
+		if (rc) {
+			pr_err("request for sdpwr_en_gpio failed,"
+							 "rc=%d\n", rc);
+		} else {
+			gpio_set_value_cansleep(sdpwr_en, enable);
+			gpio_free(sdpwr_en);
+			sdhci_msm_gpio_flg = 1;
+		}
+	} else {
+		msm_tlmm_set_hdrive(TLMM_PULL_SDC2_CMD, GPIO_CFG_NO_PULL);
+		msm_tlmm_set_hdrive(TLMM_PULL_SDC2_DATA, GPIO_CFG_NO_PULL);
+		rc = gpio_request(sdpwr_en, "sdpwr_en_gpio");
+		if (rc) {
+			pr_err("request for sdpwr_en_gpio failed,"
+							 "rc=%d\n", rc);
+		} else {
+			gpio_set_value_cansleep(sdpwr_en, enable);
+			gpio_free(sdpwr_en);
+			sdhci_msm_gpio_flg = 0;
+		}
+		if (!strcmp(mmc_hostname(host->mmc),HOST_MMC_SD)) {
+			timer_start = sh_mmc_timer_get_sclk_time();
+		}
+		msleep(10);
+	}
+
+	pr_debug("%s: set sd vdd power(%d)\n",
+			mmc_hostname(host->mmc), enable);
+}
+#endif /* CONFIG_MMC_SD_CUST_SH */
+
 static irqreturn_t sdhci_msm_pwr_irq(int irq, void *data)
 {
 	struct sdhci_host *host = (struct sdhci_host *)data;
@@ -2022,6 +2135,12 @@ static irqreturn_t sdhci_msm_pwr_irq(int irq, void *data)
 
 	/* Handle BUS ON/OFF*/
 	if (irq_status & CORE_PWRCTL_BUS_ON) {
+#ifdef CONFIG_MMC_SD_CUST_SH
+		if (!strcmp(mmc_hostname(host->mmc),HOST_MMC_SD)) {
+			if(!sdhci_msm_gpio_flg && (mmc_cd_get_status(msm_host->mmc) == 1))
+				sdhci_msm_set_enpwr_gpio(host, true);
+		}
+#endif /* CONFIG_MMC_SD_CUST_SH */
 		ret = sdhci_msm_setup_vreg(msm_host->pdata, true, false);
 		if (!ret) {
 			ret = sdhci_msm_setup_pins(msm_host->pdata, true);
@@ -2039,6 +2158,12 @@ static irqreturn_t sdhci_msm_pwr_irq(int irq, void *data)
 	if (irq_status & CORE_PWRCTL_BUS_OFF) {
 		ret = sdhci_msm_setup_vreg(msm_host->pdata, false, false);
 		if (!ret) {
+#ifdef CONFIG_MMC_SD_CUST_SH
+			if (!strcmp(mmc_hostname(host->mmc),HOST_MMC_SD)) {
+				if(sdhci_msm_gpio_flg)
+					sdhci_msm_set_enpwr_gpio(host, false);
+			}
+#endif /* CONFIG_MMC_SD_CUST_SH */
 			ret = sdhci_msm_setup_pins(msm_host->pdata, false);
 			ret |= sdhci_msm_set_vdd_io_vol(msm_host->pdata,
 					VDD_IO_LOW, 0);
@@ -2948,6 +3073,12 @@ static int __devinit sdhci_msm_probe(struct platform_device *pdev)
 				msm_host->pwr_irq, ret);
 		goto vreg_deinit;
 	}
+#ifdef CONFIG_MMC_SD_PENDING_RESUME_CUST_SH
+	if (strncmp(mmc_hostname(host->mmc), HOST_MMC_SD, sizeof(HOST_MMC_SD)) == 0) {
+		sh_sdhci_msm_sd_pwrirq_num = msm_host->pwr_irq;
+		sh_sdhci_msm_sd_irq_num = host->irq;
+	}
+#endif /* CONFIG_MMC_SD_PENDING_RESUME_CUST_SH */
 
 	/* Enable pwr irq interrupts */
 	writel_relaxed(INT_MASK, (msm_host->core_mem + CORE_PWRCTL_MASK));
@@ -3079,6 +3210,11 @@ static int __devinit sdhci_msm_probe(struct platform_device *pdev)
 
 	device_enable_async_suspend(&pdev->dev);
 	/* Successful initialization */
+#ifdef CONFIG_MMC_SD_PENDING_RESUME_CUST_SH
+	if (strncmp(mmc_hostname(host->mmc), HOST_MMC_SD, sizeof(HOST_MMC_SD)) == 0) {
+		mutex_init( &sd_irq_lock );
+	}
+#endif /* CONFIG_MMC_SD_PENDING_RESUME_CUST_SH */
 	goto out;
 
 remove_max_bus_bw_file:
@@ -3218,6 +3354,16 @@ static int sdhci_msm_runtime_suspend(struct device *dev)
 	struct sdhci_msm_host *msm_host = pltfm_host->priv;
 	int ret;
 
+#ifdef CONFIG_MMC_SD_PENDING_RESUME_CUST_SH
+	bool mutex_locked = true;
+	
+	if (!strncmp( mmc_hostname( host->mmc), HOST_MMC_SD,  sizeof( HOST_MMC_SD)))
+		if (!mutex_trylock(&sd_irq_lock)) {
+			pr_warn( "%s : Failed to mutex_trylock\n", __func__ );
+			mutex_locked = false;
+		}
+#endif /* CONFIG_MMC_SD_PENDING_RESUME_CUST_SH */
+
 	ret = sdhci_msm_cfg_sdio_wakeup(host, true);
 	/* pwr_irq is not monitored by mpm on suspend, hence disable it */
 	if (!ret)
@@ -3227,6 +3373,12 @@ static int sdhci_msm_runtime_suspend(struct device *dev)
 
 skip_disable_host_irq:
 	disable_irq(msm_host->pwr_irq);
+
+#ifdef CONFIG_MMC_SD_PENDING_RESUME_CUST_SH
+	if (!strncmp( mmc_hostname( host->mmc), HOST_MMC_SD,  sizeof( HOST_MMC_SD)))
+		if (mutex_locked)
+			mutex_unlock(&sd_irq_lock);
+#endif /* CONFIG_MMC_SD_PENDING_RESUME_CUST_SH */
 
 	/*
 	 * Remove the vote immediately only if clocks are off in which
@@ -3248,6 +3400,16 @@ static int sdhci_msm_runtime_resume(struct device *dev)
 	struct sdhci_msm_host *msm_host = pltfm_host->priv;
 	int ret;
 
+#ifdef CONFIG_MMC_SD_PENDING_RESUME_CUST_SH
+	bool mutex_locked = true;
+	
+	if (!strncmp( mmc_hostname( host->mmc), HOST_MMC_SD,  sizeof( HOST_MMC_SD)))
+		if (!mutex_trylock(&sd_irq_lock)) {
+			pr_warn( "%s : Failed to mutex_trylock\n", __func__ );
+			mutex_locked = false;
+		}
+#endif /* CONFIG_MMC_SD_PENDING_RESUME_CUST_SH */
+
 	ret = sdhci_msm_cfg_sdio_wakeup(host, false);
 	if (!ret)
 		goto skip_enable_host_irq;
@@ -3257,8 +3419,54 @@ static int sdhci_msm_runtime_resume(struct device *dev)
 skip_enable_host_irq:
 	enable_irq(msm_host->pwr_irq);
 
+#ifdef CONFIG_MMC_SD_PENDING_RESUME_CUST_SH
+	if (!strncmp( mmc_hostname( host->mmc), HOST_MMC_SD,  sizeof( HOST_MMC_SD)))
+		if (mutex_locked)
+			mutex_unlock(&sd_irq_lock);
+#endif /* CONFIG_MMC_SD_PENDING_RESUME_CUST_SH */
+
 	return 0;
 }
+
+#ifdef CONFIG_MMC_SD_PENDING_RESUME_CUST_SH
+int sh_sdhci_msm_disable_irq(void)
+{
+	if (sh_sdhci_msm_sd_irq_num >= 0) {
+		disable_irq(sh_sdhci_msm_sd_irq_num);
+	}
+	if (sh_sdhci_msm_sd_pwrirq_num >= 0) {
+		disable_irq(sh_sdhci_msm_sd_pwrirq_num);
+	}
+
+	return 0;
+}
+
+int sh_sdhci_msm_enable_irq(void)
+{
+	if (sh_sdhci_msm_sd_pwrirq_num >= 0) {
+		enable_irq(sh_sdhci_msm_sd_pwrirq_num);
+	}
+	if (sh_sdhci_msm_sd_irq_num >= 0) {
+		enable_irq(sh_sdhci_msm_sd_irq_num);
+	}
+
+	return 0;
+}
+
+bool is_sd_irqs_disabled( void )
+{
+	struct irq_desc *desc = NULL;
+	bool rc = false;
+	
+	if (sh_sdhci_msm_sd_irq_num >= 0){
+		desc = irq_to_desc( sh_sdhci_msm_sd_irq_num );
+		if (desc != NULL)
+		 	if (desc->depth != 0)
+				rc = true;
+	}
+	return rc;
+}
+#endif /* CONFIG_MMC_SD_PENDING_RESUME_CUST_SH */
 
 #ifdef CONFIG_PM_SLEEP
 

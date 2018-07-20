@@ -977,11 +977,23 @@ int mmc_sd_setup_card(struct mmc_host *host, struct mmc_card *card,
 	return 0;
 }
 
+#ifdef CONFIG_MMC_SD_ECO_MODE_CUST_SH
+extern int sh_mmc_sd_eco_mode_current;
+#endif /* CONFIG_MMC_SD_ECO_MODE_CUST_SH */
 unsigned mmc_sd_get_max_clock(struct mmc_card *card)
 {
 	unsigned max_dtr = (unsigned int)-1;
 
 	if (mmc_card_highspeed(card)) {
+#ifdef CONFIG_MMC_SD_ECO_MODE_CUST_SH
+		pr_info("%s: mmc_sd_get_max_clock: mode: %s\n",
+            mmc_hostname(card->host), (sh_mmc_sd_eco_mode_current ? "eco" : "normal"));
+		if (sh_mmc_sd_eco_mode_current) {
+			card->sw_caps.hs_max_dtr = HIGH_SPEED_MAX_DTR_ECO;
+		}else{
+			card->sw_caps.hs_max_dtr = HIGH_SPEED_MAX_DTR;
+		}
+#endif /* CONFIG_MMC_SD_ECO_MODE_CUST_SH */
 		if (max_dtr > card->sw_caps.hs_max_dtr)
 			max_dtr = card->sw_caps.hs_max_dtr;
 	} else if (max_dtr > card->csd.max_dtr) {

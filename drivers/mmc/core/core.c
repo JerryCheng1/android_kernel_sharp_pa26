@@ -48,6 +48,10 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/mmc.h>
 
+#ifdef CONFIG_MMC_SD_PENDING_RESUME_CUST_SH
+extern bool sh_mmc_pending_resume;
+extern bool sh_mmc_pending_powoff;
+#endif /* CONFIG_MMC_SD_PENDING_RESUME_CUST_SH */
 static void mmc_clk_scaling(struct mmc_host *host, bool from_wq);
 
 /* If the device is not responding */
@@ -892,6 +896,10 @@ static void mmc_post_req(struct mmc_host *host, struct mmc_request *mrq,
 	}
 }
 
+#ifdef CONFIG_MMC_SD_ECO_MODE_CUST_SH
+int sh_mmc_sd_set_eco_mode(struct mmc_host *host);
+#endif /* CONFIG_MMC_SD_ECO_MODE_CUST_SH */
+
 /**
  *	mmc_start_req - start a non-blocking request
  *	@host: MMC host to start command
@@ -969,6 +977,13 @@ struct mmc_async_req *mmc_start_req(struct mmc_host *host,
 				 mmc_hostname(host), __func__);
 		}
 	}
+
+#ifdef CONFIG_MMC_SD_ECO_MODE_CUST_SH
+    if (sh_mmc_sd_set_eco_mode(host))
+        pr_info("%s: %s switch eco / normal mode.\n",
+                mmc_hostname(host), __func__);
+#endif /* CONFIG_MMC_SD_ECO_MODE_CUST_SH */
+
 	if (!err && areq) {
 		/* urgent notification may come again */
 		spin_lock_irqsave(&host->context_info.lock, flags);
@@ -3557,13 +3572,23 @@ int mmc_suspend_host(struct mmc_host *host)
 	}
 	mmc_bus_put(host);
 
+#ifdef CONFIG_MMC_SD_PENDING_RESUME_CUST_SH
+	if (!((host->card && mmc_card_sd( host->card )) &&
+		(sh_mmc_pending_powoff == true))) {
+#endif /* CONFIG_MMC_SD_PENDING_RESUME_CUST_SH */
 	if (!err && !mmc_card_keep_power(host))
 		mmc_power_off(host);
+#ifdef CONFIG_MMC_SD_PENDING_RESUME_CUST_SH
+	}
+#endif /* CONFIG_MMC_SD_PENDING_RESUME_CUST_SH */
 
 	return err;
 stop_bkops_err:
 	if (!(host->card && mmc_card_sdio(host->card)))
 		mmc_release_host(host);
+#ifdef CONFIG_MMC_CUST_SH
+	mmc_bus_put(host);
+#endif /* CONFIG_MMC_CUST_SH */
 	return err;
 }
 
@@ -3612,6 +3637,12 @@ int mmc_resume_host(struct mmc_host *host)
 	}
 	host->pm_flags &= ~MMC_PM_KEEP_POWER;
 	mmc_bus_put(host);
+
+#ifdef CONFIG_MMC_SD_PENDING_RESUME_CUST_SH
+	if (strncmp(mmc_hostname(host), HOST_MMC_SD, sizeof(HOST_MMC_SD)) == 0){
+		sh_mmc_pending_resume = false;
+	}
+#endif /* CONFIG_MMC_SD_PENDING_RESUME_CUST_SH */
 
 	return err;
 }
@@ -3696,6 +3727,11 @@ int mmc_pm_notify(struct notifier_block *notify_block,
 		}
 		host->rescan_disable = 0;
 		spin_unlock_irqrestore(&host->lock, flags);
+#ifdef CONFIG_MMC_SD_PENDING_RESUME_CUST_SH
+		if (strncmp(mmc_hostname(host), HOST_MMC_SD, sizeof(HOST_MMC_SD)) == 0){
+			mmc_detect_change(host, msecs_to_jiffies(4000));
+		} else
+#endif /* CONFIG_MMC_SD_PENDING_RESUME_CUST_SH */
 		mmc_detect_change(host, 0);
 		break;
 
