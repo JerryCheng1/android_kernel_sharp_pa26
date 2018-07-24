@@ -27,7 +27,7 @@ source "drivers/sharp/proximity/Kconfig"
 #source "drivers/sharp/wifi/Kconfig"
 source "drivers/sharp/shtps/Kconfig"
 #source "drivers/sharp/shirda/Kconfig"
-#source "drivers/sharp/shcamled/Kconfig"
+source "drivers/sharp/shcamled/Kconfig"
 source "drivers/sharp/shvibrator/Kconfig"
 #source "drivers/sharp/vold/Kconfig"
 

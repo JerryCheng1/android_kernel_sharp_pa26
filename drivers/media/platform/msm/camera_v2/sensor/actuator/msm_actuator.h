@@ -101,6 +101,11 @@ struct msm_actuator_ctrl_t {
 	uint32_t subdev_id;
 	struct msm_actuator_vreg vreg_cfg;
 	enum msm_actuator_state_t actuator_state;
+/* SHLOCAL_CAMERA_DRIVERS-> */
+	uint8_t cci_inited;
+	uint8_t num_instance;
+	uint8_t fw_inited;
+/* SHLOCAL_CAMERA_DRIVERS<- */
 };
 
 #endif

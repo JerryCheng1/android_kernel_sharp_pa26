@@ -21,8 +21,6 @@
 #include <linux/kernel.h>
 #include <linux/list.h>
 
-#ifdef CONFIG_BATTERY_SH
-
 /* for calc base battery capacity */
 struct qpnp_bms_calc_base_info
 {
@@ -169,7 +167,5 @@ int qpnp_torch_is_enable(void);
 static inline int qpnp_torch_is_enable(void)
 { return -ENXIO; }
 #endif /* CONFIG_LEDS_QPNP */
-
-#endif /* CONFIG_BATTERY_SH */
 
 #endif /* __QPNP_API_H */

@@ -1039,6 +1039,10 @@ static void msm_ispif_release(struct ispif_device *ispif)
 		return;
 	}
 
+/* SHLOCAL_CAMERA_DRIVERS-> */
+    msm_camera_io_w(0, ispif->clk_mux_base);
+/* SHLOCAL_CAMERA_DRIVERS<- */
+
 	/* make sure no streaming going on */
 	msm_ispif_reset(ispif);
 

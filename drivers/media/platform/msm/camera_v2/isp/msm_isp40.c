@@ -1176,7 +1176,13 @@ static void msm_vfe40_cfg_axi_ub_equal_slicing(
 static void msm_vfe40_cfg_axi_ub(struct vfe_device *vfe_dev)
 {
 	struct msm_vfe_axi_shared_data *axi_data = &vfe_dev->axi_data;
+/* SHLOCAL_CAMERA_DRIVERS-> */
+#if 0
 	axi_data->wm_ub_cfg_policy = MSM_WM_UB_CFG_DEFAULT;
+#else
+	axi_data->wm_ub_cfg_policy = MSM_WM_UB_EQUAL_SLICING;
+#endif
+/* SHLOCAL_CAMERA_DRIVERS<- */
 	if (axi_data->wm_ub_cfg_policy == MSM_WM_UB_EQUAL_SLICING)
 		msm_vfe40_cfg_axi_ub_equal_slicing(vfe_dev);
 	else

@@ -152,3 +152,4 @@ obj-$(CONFIG_SENSORS_PROXIMITY) += sharp/proximity/
 obj-$(CONFIG_TOUCHSCREEN_SHTPS) += sharp/shtps/
 obj-$(CONFIG_SHUB)		+= sharp/shsensor_hub/ml630q790/
 obj-$(CONFIG_SHVIBRATOR_LINEAR) += sharp/shvibrator/
+obj-$(CONFIG_SHCAMERA_PICT)		+= sharp/shcamled/

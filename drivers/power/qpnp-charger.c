@@ -36,6 +36,10 @@
 #include <linux/of_gpio.h>
 #include <linux/qpnp/pin.h>
 
+#ifdef CONFIG_MACH_REN
+#include <linux/qpnp/qpnp-api.h>
+#endif /* CONFIG_MACH_EBZ */
+
 /* Interrupt offsets */
 #define INT_RT_STS(base)			(base + 0x10)
 #define INT_SET_TYPE(base)			(base + 0x11)

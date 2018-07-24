@@ -16,6 +16,9 @@
 enum stream_state {
 	START_STREAM = 0,
 	STOP_STREAM,
+/* SHLOCAL_CAMERA_DRIVERS-> */
+	STOP_STREAM_SOF_FREEZE,
+/* SHLOCAL_CAMERA_DRIVERS<- */
 };
 
 int camera_init_v4l2(struct device *dev, unsigned int *session);

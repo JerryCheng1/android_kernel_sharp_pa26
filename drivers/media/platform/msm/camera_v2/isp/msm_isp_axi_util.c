@@ -1333,7 +1333,17 @@ static int msm_isp_start_axi_stream(struct vfe_device *vfe_dev,
 		vfe_dev->hw_info->vfe_ops.core_ops.
 			update_camif_state(vfe_dev, camif_update);
 	}
-
+/* SHLOCAL_CAMERA_DRIVERS-> */
+	if (vfe_dev->axi_data.src_info[VFE_RAW_0].raw_stream_count > 0) {
+		vfe_dev->axi_data.src_info[VFE_RAW_0].frame_id = 0;
+	}
+	else if (vfe_dev->axi_data.src_info[VFE_RAW_1].raw_stream_count > 0) {
+		vfe_dev->axi_data.src_info[VFE_RAW_1].frame_id = 0;
+	}
+	else if (vfe_dev->axi_data.src_info[VFE_RAW_2].raw_stream_count > 0) {
+		vfe_dev->axi_data.src_info[VFE_RAW_2].frame_id = 0;
+	}
+/* SHLOCAL_CAMERA_DRIVERS<- */
 	if (wait_for_complete)
 		rc = msm_isp_axi_wait_for_cfg_done(vfe_dev, camif_update);
 
@@ -1362,6 +1372,13 @@ static int msm_isp_stop_axi_stream(struct vfe_device *vfe_dev,
 			HANDLE_TO_IDX(stream_cfg_cmd->stream_handle[i])];
 
 		stream_info->state = STOP_PENDING;
+/* SHLOCAL_CAMERA_DRIVERS-> */
+		if (stream_cfg_cmd->is_sof_freeze) {
+			msm_isp_axi_stream_enable_cfg(vfe_dev, stream_info);
+			stream_info->state = INACTIVE;
+			break;
+		}
+/* SHLOCAL_CAMERA_DRIVERS<- */
 		if (stream_info->stream_src == CAMIF_RAW ||
 			stream_info->stream_src == IDEAL_RAW) {
 			/* We dont get reg update IRQ for raw snapshot
@@ -1452,9 +1469,16 @@ int msm_isp_cfg_axi_stream(struct vfe_device *vfe_dev, void *arg)
 	if (stream_cfg_cmd->cmd == START_STREAM)
 		rc = msm_isp_start_axi_stream(
 		   vfe_dev, stream_cfg_cmd, camif_update);
-	else
+/* SHLOCAL_CAMERA_DRIVERS-> */
+	else if (stream_cfg_cmd->cmd == STOP_STREAM) {
 		rc = msm_isp_stop_axi_stream(
 		   vfe_dev, stream_cfg_cmd, camif_update);
+	} else if (stream_cfg_cmd->cmd == STOP_STREAM_SOF_FREEZE) {
+		stream_cfg_cmd->is_sof_freeze = 1;
+		rc = msm_isp_stop_axi_stream(
+		   vfe_dev, stream_cfg_cmd, camif_update);
+	}
+/* SHLOCAL_CAMERA_DRIVERS<- */
 
 	if (rc < 0)
 		pr_err("%s: start/stop stream failed\n", __func__);

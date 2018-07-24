@@ -13,6 +13,9 @@
 #define __MSMB_ISP__
 
 #include <linux/videodev2.h>
+/* SHLOCAL_CAMERA_DRIVERS-> */
+#include <stdbool.h>
+/* SHLOCAL_CAMERA_DRIVERS<- */
 
 #define MAX_PLANES_PER_STREAM 3
 #define MAX_NUM_STREAM 7
@@ -165,11 +168,17 @@ enum msm_vfe_axi_stream_cmd {
 	STOP_STREAM,
 	START_STREAM,
 	STOP_IMMEDIATELY,
+/* SHLOCAL_CAMERA_DRIVERS-> */
+	STOP_STREAM_SOF_FREEZE,
+/* SHLOCAL_CAMERA_DRIVERS<- */
 };
 
 struct msm_vfe_axi_stream_cfg_cmd {
 	uint8_t num_streams;
 	uint32_t stream_handle[MAX_NUM_STREAM];
+/* SHLOCAL_CAMERA_DRIVERS-> */
+	bool is_sof_freeze;
+/* SHLOCAL_CAMERA_DRIVERS<- */
 	enum msm_vfe_axi_stream_cmd cmd;
 };
 
@@ -221,10 +230,16 @@ struct msm_vfe_stats_stream_request_cmd {
 
 struct msm_vfe_stats_stream_release_cmd {
 	uint32_t stream_handle;
+/* SHLOCAL_CAMERA_DRIVERS-> */
+	bool is_sof_freeze;
+/* SHLOCAL_CAMERA_DRIVERS<- */
 };
 struct msm_vfe_stats_stream_cfg_cmd {
 	uint8_t num_streams;
 	uint32_t stream_handle[MSM_ISP_STATS_MAX];
+/* SHLOCAL_CAMERA_DRIVERS-> */
+	bool is_sof_freeze;
+/* SHLOCAL_CAMERA_DRIVERS<- */
 	uint8_t enable;
 	uint32_t stats_burst_len;
 };

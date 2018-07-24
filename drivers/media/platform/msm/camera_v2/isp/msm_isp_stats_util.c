@@ -263,6 +263,10 @@ int msm_isp_release_stats_stream(struct vfe_device *vfe_dev, void *arg)
 	} else if (stream_info->state != STATS_INACTIVE) {
 		stream_cfg_cmd.enable = 0;
 		stream_cfg_cmd.num_streams = 1;
+/* SHLOCAL_CAMERA_DRIVERS-> */
+		if (stream_release_cmd->is_sof_freeze)
+			stream_cfg_cmd.is_sof_freeze = 1;
+/* SHLOCAL_CAMERA_DRIVERS<- */
 		stream_cfg_cmd.stream_handle[0] =
 			stream_release_cmd->stream_handle;
 		rc = msm_isp_cfg_stats_stream(vfe_dev, &stream_cfg_cmd);
@@ -463,7 +467,15 @@ static int msm_isp_stop_stats_stream(struct vfe_device *vfe_dev,
 			comp_stats_mask |= 1 << idx;
 	}
 	if (vfe_dev->axi_data.src_info[VFE_PIX_0].active) {
+/* SHLOCAL_CAMERA_DRIVERS-> */
+#if 0
 		rc = msm_isp_stats_wait_for_cfg_done(vfe_dev);
+#else
+		if (!stream_cfg_cmd->is_sof_freeze) {
+			rc = msm_isp_stats_wait_for_cfg_done(vfe_dev);
+		}
+#endif
+/* SHLOCAL_CAMERA_DRIVERS<- */
 	} else {
 		vfe_dev->hw_info->vfe_ops.stats_ops.enable_module(
 			vfe_dev, stats_mask, stream_cfg_cmd->enable);
