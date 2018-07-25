@@ -32,6 +32,9 @@
 #include <sound/pcm_params.h>
 #include <sound/q6core.h>
 #include <linux/slab.h>
+#ifdef CONFIG_SH_AUDIO_DRIVER /* 09-109 */
+#include <linux/spinlock.h>
+#endif /* CONFIG_SH_AUDIO_DRIVER *//* 09-109 */
 
 #include "msm-pcm-routing-v2.h"
 #include "msm-dolby-dap-config.h"
@@ -67,6 +70,11 @@ struct msm_pcm_routing_fdai_data {
 #define EC_PORT_ID_QUATERNARY_MI2S_TX 4
 
 static struct mutex routing_lock;
+
+#ifdef CONFIG_SH_AUDIO_DRIVER /* 09-109 */
+static int a2dp_mode = 0;
+static DEFINE_SPINLOCK(spinlock);
+#endif /* CONFIG_SH_AUDIO_DRIVER *//* 09-109 */
 
 static int fm_switch_enable;
 static int fm_pcmrx_switch_enable;
@@ -4601,6 +4609,44 @@ int msm_routing_check_backend_enabled(int fedai_id)
 	}
 	return 0;
 }
+
+#ifdef CONFIG_SH_AUDIO_DRIVER /* 09-109 */
+void msm_codec_set_a2dp_mode(int mode){
+	unsigned long flags;
+	spin_lock_irqsave(&spinlock, flags);
+	a2dp_mode = mode;
+	spin_unlock_irqrestore(&spinlock, flags);
+}
+EXPORT_SYMBOL_GPL(msm_codec_set_a2dp_mode);
+#endif /* CONFIG_SH_AUDIO_DRIVER *//* 09-109 */
+
+#ifdef CONFIG_SH_AUDIO_DRIVER /* 09-106 */
+int msm_routing_get_is_music_play(void)
+{
+	int music_type = 0;
+
+#ifdef CONFIG_SH_AUDIO_DRIVER /* 09-109 */
+	unsigned long flags;
+	spin_lock_irqsave(&spinlock, flags);
+	if (a2dp_mode)
+		music_type |= 1 << 3;
+#endif /* CONFIG_SH_AUDIO_DRIVER *//* 09-109 */
+	if (test_bit(0, &msm_bedais[2].fe_sessions))
+		music_type |= 1 << 0;
+	if (test_bit(4, &msm_bedais[2].fe_sessions))
+		music_type |= 1 << 1;
+	if (test_bit(1, &msm_bedais[2].fe_sessions))
+		music_type |= 1 << 2;
+	if (test_bit(3, &msm_bedais[2].fe_sessions))
+		music_type |= 1 << 4;
+#ifdef CONFIG_SH_AUDIO_DRIVER /* 09-109 */
+	spin_unlock_irqrestore(&spinlock, flags);
+#endif /* CONFIG_SH_AUDIO_DRIVER *//* 09-109 */
+
+	return music_type;
+}
+EXPORT_SYMBOL_GPL(msm_routing_get_is_music_play);
+#endif /* CONFIG_SH_AUDIO_DRIVER *//* 09-106 */
 
 static int __init msm_soc_routing_platform_init(void)
 {

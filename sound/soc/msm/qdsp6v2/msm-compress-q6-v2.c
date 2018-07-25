@@ -589,6 +589,12 @@ static int msm_compr_configure_dsp(struct snd_compr_stream *cstream)
 		.rampingcurve = SOFT_VOLUME_CURVE_LINEAR,
 	};
 
+#ifdef CONFIG_SH_AUDIO_DRIVER /* 09-104 */
+	if(prtd->codec_param.codec.format == SNDRV_PCM_FORMAT_S24_LE){
+		bits_per_sample = 24;
+	}
+#endif /* CONFIG_SH_AUDIO_DRIVER */ /* 09-104 */
+
 	pr_debug("%s: stream_id %d\n", __func__, ac->stream_id);
 	ret = q6asm_stream_open_write_v2(ac,
 				prtd->codec, bits_per_sample,
@@ -884,6 +890,23 @@ static int msm_compr_set_params(struct snd_compr_stream *cstream,
 	case SNDRV_PCM_RATE_48000:
 		prtd->sample_rate = 48000;
 		break;
+#ifdef CONFIG_SH_AUDIO_DRIVER /* 09-104 */
+	case SNDRV_PCM_RATE_64000:
+		prtd->sample_rate = 64000;
+		break;
+	case SNDRV_PCM_RATE_88200:
+		prtd->sample_rate = 88200;
+		break;
+	case SNDRV_PCM_RATE_96000:
+		prtd->sample_rate = 96000;
+		break;
+	case SNDRV_PCM_RATE_176400:
+		prtd->sample_rate = 176400;
+		break;
+	case SNDRV_PCM_RATE_192000:
+		prtd->sample_rate = 192000;
+		break;
+#endif /* CONFIG_SH_AUDIO_DRIVER */ /* 09-104 */
 	}
 
 	pr_debug("%s: sample_rate %d\n", __func__, prtd->sample_rate);

@@ -171,6 +171,10 @@ int msm_routing_check_backend_enabled(int fedai_id);
 
 int multi_ch_pcm_set_volume(unsigned volume);
 
+#ifdef CONFIG_SH_AUDIO_DRIVER /* 09-106 */
+int msm_routing_get_is_music_play(void);
+#endif /* CONFIG_SH_AUDIO_DRIVER *//* 09-106 */
+
 uint32_t get_adm_rx_topology(void);
 
 uint32_t get_adm_tx_topology(void);

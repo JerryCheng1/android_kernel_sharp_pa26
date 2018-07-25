@@ -13,7 +13,7 @@ source "drivers/sharp/shdisp/Kconfig"
 source "drivers/sharp/shsensor_hub/ml630q790/Kconfig"
 
 #CONFIG_SH_AUDIO_DRIVER-> 06-007
-#source "drivers/sharp/shaudio/Kconfig"
+source "drivers/sharp/shaudio/Kconfig"
 #CONFIG_SH_AUDIO_DRIVER<- 06-007
 
 #source "drivers/sharp/tunerdrv/Kconfig"

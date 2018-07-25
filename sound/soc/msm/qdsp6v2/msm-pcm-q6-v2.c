@@ -262,6 +262,9 @@ static void event_handler(uint32_t opcode,
 static int msm_pcm_playback_prepare(struct snd_pcm_substream *substream)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
+#ifdef CONFIG_SH_AUDIO_DRIVER /* 09-114 */
+	struct snd_soc_pcm_runtime *soc_prtd = substream->private_data;
+#endif /* CONFIG_SH_AUDIO_DRIVER *//* 09-114 */
 	struct msm_audio *prtd = runtime->private_data;
 	int ret;
 	uint16_t bits_per_sample = 16;
@@ -289,8 +292,19 @@ static int msm_pcm_playback_prepare(struct snd_pcm_substream *substream)
 			prtd->audio_client, runtime->rate,
 			runtime->channels, !prtd->set_channel_map,
 			prtd->channel_map, bits_per_sample);
+#ifdef CONFIG_SH_AUDIO_DRIVER /* 09-114 */
+	if (ret < 0) {
+		pr_err("%s: CMD Format block failed\n", __func__);
+		msm_pcm_routing_dereg_phy_stream(soc_prtd->dai_link->be_id,
+							SNDRV_PCM_STREAM_PLAYBACK);
+		q6asm_audio_client_free(prtd->audio_client);
+		prtd->audio_client = NULL;
+		return ret;
+	}
+#else
 	if (ret < 0)
 		pr_info("%s: CMD Format block failed\n", __func__);
+#endif /* CONFIG_SH_AUDIO_DRIVER *//* 09-114 */
 
 	atomic_set(&prtd->out_count, runtime->periods);
 

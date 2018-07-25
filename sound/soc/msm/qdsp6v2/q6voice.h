@@ -595,7 +595,11 @@ struct vss_istream_cmd_create_passive_control_session_t {
 #define VSS_IVOLUME_MUTE_OFF		0
 #define VSS_IVOLUME_MUTE_ON		1
 
+#ifdef CONFIG_SH_AUDIO_DRIVER   /* [07-054] */
+#define DEFAULT_MUTE_RAMP_DURATION	20
+#else   /* CONFIG_SH_AUDIO_DRIVER */    /* [07-054] */
 #define DEFAULT_MUTE_RAMP_DURATION	500
+#endif  /* CONFIG_SH_AUDIO_DRIVER */    /* [07-054] */
 #define DEFAULT_VOLUME_RAMP_DURATION	20
 #define MAX_RAMP_DURATION		5000
 
