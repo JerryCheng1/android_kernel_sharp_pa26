@@ -515,6 +515,12 @@ static ssize_t autosleep_store(struct kobject *kobj,
 		return -EINVAL;
 
 	error = pm_autosleep_set_state(state);
+
+#ifdef CONFIG_SHSYS_CUST
+	if(!error)
+		sysfs_notify(kobj, NULL, "autosleep");
+#endif /* CONFIG_SHSYS_CUST */
+
 	return error ? error : n;
 }
 
