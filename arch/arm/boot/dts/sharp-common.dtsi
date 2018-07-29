@@ -487,10 +487,6 @@
 	msm_gpu: qcom,kgsl-3d0@fdb00000 {
 		qcom,initial-pwrlevel = <4>;
 	};
-	
-	qcom,ram-console{
-		compatible = "ram-console";
-	};
 };
 
 /*****************************************/
