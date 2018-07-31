@@ -1218,9 +1218,6 @@ static int hci_outgoing_auth_needed(struct hci_dev *hdev,
 		return 0;
 
 	return 1;
-	if (!e)
-		return false;
-
 }
 
 static void hci_cs_remote_name_req(struct hci_dev *hdev, __u8 status)
@@ -3325,8 +3322,6 @@ static inline void hci_le_ltk_request_evt(struct hci_dev *hdev,
 	memcpy(cp.ltk, ltk->val, sizeof(ltk->val));
 	cp.handle = cpu_to_le16(conn->handle);
 	conn->pin_length = ltk->pin_len;
-
-	conn->enc_key_size = ltk->enc_size;
 
 	hci_send_cmd(hdev, HCI_OP_LE_LTK_REPLY, sizeof(cp), &cp);
 

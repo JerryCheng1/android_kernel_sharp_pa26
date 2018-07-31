@@ -287,8 +287,6 @@ static u8 check_enc_key_size(struct l2cap_conn *conn, __u8 max_key_size)
 #define JUST_WORKS	SMP_JUST_WORKS
 #define REQ_PASSKEY	SMP_REQ_PASSKEY
 #define CFM_PASSKEY	SMP_CFM_PASSKEY
-
-	if (test_and_clear_bit(HCI_CONN_LE_SMP_PEND, &conn->hcon->flags))
 #define JUST_CFM	SMP_JUST_CFM
 #define OVERLAP		SMP_OVERLAP
 static const u8	gen_method[5][5] = {
@@ -738,9 +736,9 @@ invalid_key:
 	return 0;
 }
 
-int smp_conn_security(struct hci_conn *hcon, __u8 sec_level)
+int smp_conn_security(struct l2cap_conn *conn, __u8 sec_level)
 {
-	struct l2cap_conn *conn = hcon->l2cap_data;
+	struct hci_conn *hcon = conn->hcon;
 	__u8 authreq;
 
 	BT_DBG("conn %p hcon %p %d req: %d",
@@ -870,19 +868,6 @@ int smp_sig_channel(struct l2cap_conn *conn, struct sk_buff *skb)
 
 	hcon->smp_conn = conn;
 	skb_pull(skb, sizeof(code));
-
-	/*
-	 * The SMP context must be initialized for all other PDUs except
-	 * pairing and security requests. If we get any other PDU when
-	 * not initialized simply disconnect (done if this function
-	 * returns an error).
-	 */
-	if (code != SMP_CMD_PAIRING_REQ && code != SMP_CMD_SECURITY_REQ &&
-	    !conn->smp_chan) {
-		BT_ERR("Unexpected SMP command 0x%02x. Disconnecting.", code);
-		kfree_skb(skb);
-		return -ENOTSUPP;
-	}
 
 	switch (code) {
 	case SMP_CMD_PAIRING_REQ:

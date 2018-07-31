@@ -2039,9 +2039,13 @@ unsigned int snd_soc_read(struct snd_soc_codec *codec, unsigned int reg)
 		dev_err(codec->dev, "read 0x%02x while offline\n", reg);
 		return -ENODEV;
 	}
-	ret = codec->read(codec, reg);
-	dev_dbg(codec->dev, "read %x => %x\n", reg, ret);
-	trace_snd_soc_reg_read(codec, reg, ret);
+	if (codec->read) {
+		ret = codec->read(codec, reg);
+		dev_dbg(codec->dev, "read %x => %x\n", reg, ret);
+		trace_snd_soc_reg_read(codec, reg, ret);
+	}
+	else
+		ret = -EIO;
 
 	return ret;
 }
@@ -2054,9 +2058,13 @@ unsigned int snd_soc_write(struct snd_soc_codec *codec,
 		dev_err(codec->dev, "write 0x%02x while offline\n", reg);
 		return -ENODEV;
 	}
-	dev_dbg(codec->dev, "write %x = %x\n", reg, val);
-	trace_snd_soc_reg_write(codec, reg, val);
-	return codec->write(codec, reg, val);
+	if (codec->write) {
+		dev_dbg(codec->dev, "write %x = %x\n", reg, val);
+		trace_snd_soc_reg_write(codec, reg, val);
+		return codec->write(codec, reg, val);
+	}
+	else
+		return -EIO;
 }
 EXPORT_SYMBOL_GPL(snd_soc_write);
 
@@ -2351,8 +2359,9 @@ int snd_soc_info_enum_double(struct snd_kcontrol *kcontrol,
 
 	if (uinfo->value.enumerated.item > e->max - 1)
 		uinfo->value.enumerated.item = e->max - 1;
-	strcpy(uinfo->value.enumerated.name,
-		snd_soc_get_enum_text(e, uinfo->value.enumerated.item));
+	memset(uinfo->value.enumerated.name, 0, sizeof(uinfo->value.enumerated.name));
+	strncpy(uinfo->value.enumerated.name,
+		snd_soc_get_enum_text(e, uinfo->value.enumerated.item), sizeof(uinfo->value.enumerated.name)-1);
 
 	return 0;
 }
@@ -2516,8 +2525,9 @@ int snd_soc_info_enum_ext(struct snd_kcontrol *kcontrol,
 
 	if (uinfo->value.enumerated.item > e->max - 1)
 		uinfo->value.enumerated.item = e->max - 1;
-	strcpy(uinfo->value.enumerated.name,
-		snd_soc_get_enum_text(e, uinfo->value.enumerated.item));
+	memset(uinfo->value.enumerated.name, 0, sizeof(uinfo->value.enumerated.name));
+	strncpy(uinfo->value.enumerated.name,
+		snd_soc_get_enum_text(e, uinfo->value.enumerated.item), sizeof(uinfo->value.enumerated.name)-1);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(snd_soc_info_enum_ext);
