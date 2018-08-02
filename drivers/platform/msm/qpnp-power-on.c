@@ -24,6 +24,10 @@
 #include <linux/log2.h>
 #include <linux/qpnp/power-on.h>
 
+#ifdef CONFIG_MACH_REN
+#include <linux/reboot.h>
+#endif
+
 #define PMIC_VER_8941           0x01
 #define PMIC_VERSION_REG        0x0105
 #define PMIC_VERSION_REV4_REG   0x0103
@@ -1163,6 +1167,11 @@ static int __devinit qpnp_pon_probe(struct spmi_device *spmi)
 
 	boot_reason = ffs(pon_sts);
 	index = ffs(pon_sts) - 1;
+#ifdef CONFIG_MACH_REN
+	if (index == 3) {
+		machine_restart("recovery");
+	}
+#endif
 	cold_boot = !qpnp_pon_is_warm_reset();
 	if (index >= ARRAY_SIZE(qpnp_pon_reason) || index < 0)
 		dev_info(&pon->spmi->dev,
