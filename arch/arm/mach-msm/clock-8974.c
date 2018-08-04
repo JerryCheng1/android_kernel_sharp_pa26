@@ -1081,24 +1081,8 @@ static struct clk_freq_tbl ftbl_gcc_blsp1_2_uart1_6_apps_clk[] = {
 	F_GCC_GND,
 	F( 3686400,  gpll0,    1,  96,  15625),
 	F( 7372800,  gpll0,    1, 192,  15625),
-#ifdef CONFIG_SHIRDA
-	F(12556800,  gpll0,    1, 327,  15625),	/* added for IrBlaster */
-	F(12672000,  gpll0,    1, 330,  15625),	/* added for IrBlaster */
-	F(12787200,  gpll0,    1, 333,  15625),	/* added for IrBlaster */
-	F(13824000,  gpll0,    1, 360,  15625),	/* added for IrBlaster */
-	F(14092800,  gpll0,    1, 367,  15625),	/* added for IrBlaster */
-	F(14553600,  gpll0,    1, 379,  15625),	/* added for IrBlaster */
-	F(14592000,  gpll0,    1, 380,  15625),	/* added for IrBlaster */
-#endif
 	F(14745600,  gpll0,    1, 384,  15625),
-#ifdef CONFIG_SHIRDA
-	F(15360000,  gpll0,    1, 400,  15625),	/* added for IrBlaster */
-#endif
 	F(16000000,  gpll0,    5,   2,     15),
-#ifdef CONFIG_SHIRDA
-	F(21504000,  gpll0,    1, 560,  15625),	/* added for IrBlaster */
-	F(21849600,  gpll0,    1, 569,  15625),	/* added for IrBlaster */
-#endif
 	F(19200000,    cxo,    1,   0,      0),
 	F(24000000,  gpll0,    5,   1,      5),
 	F(32000000,  gpll0,    1,   4,     75),
@@ -4944,17 +4928,25 @@ static struct clk_lookup msm_clocks_8974pro_only[] __initdata = {
 #if defined(CONFIG_IMX135) || defined(CONFIG_IMX214)
 	CLK_LOOKUP("cam_src_clk", mclk0_clk_src.c, "20.qcom,camera"),
 	CLK_LOOKUP("cam_src_clk", mclk0_clk_src.c, "4-0020"),
+#else
+	CLK_LOOKUP("cam_src_clk", mclk0_clk_src.c, "20.qcom,camera"),
 #endif /* defined(CONFIG_IMX135) || defined(CONFIG_IMX214) */
 #if defined(CONFIG_IMX132)
 	CLK_LOOKUP("cam_src_clk", mclk1_clk_src.c, "6c.qcom,camera"),
+#else
+	CLK_LOOKUP("cam_src_clk", mclk2_clk_src.c, "6c.qcom,camera"),
 #endif /* defined(CONFIG_IMX132) */
 	CLK_LOOKUP("cam_src_clk", mclk1_clk_src.c, "90.qcom,camera"),
 #if defined(CONFIG_IMX135) || defined(CONFIG_IMX214)
 	CLK_LOOKUP("cam_clk", camss_mclk0_clk.c, "20.qcom,camera"),
 	CLK_LOOKUP("cam_clk", camss_mclk0_clk.c, "4-0020"),
+#else
+	CLK_LOOKUP("cam_clk", camss_mclk0_clk.c, "20.qcom,camera"),
 #endif /* defined(CONFIG_IMX135) || defined(CONFIG_IMX214) */
 #if defined(CONFIG_IMX132)
 	CLK_LOOKUP("cam_clk", camss_mclk1_clk.c, "6c.qcom,camera"),
+#else
+	CLK_LOOKUP("cam_clk", camss_mclk2_clk.c, "6c.qcom,camera"),
 #endif /* defined(CONFIG_IMX132) */
 	CLK_LOOKUP("cam_clk", camss_mclk1_clk.c, "90.qcom,camera"),
 #if defined(CONFIG_IMX081)
@@ -4966,6 +4958,7 @@ static struct clk_lookup msm_clocks_8974pro_only[] __initdata = {
 #if defined(CONFIG_S5K4H5YB)
 	CLK_LOOKUP("cam_src_clk", mclk0_clk_src.c, "10.qcom,camera"),
 #endif /* defined(CONFIG_S5K4H5YB) */
+
 #if defined(CONFIG_IMX081)
 	CLK_LOOKUP("cam_clk", camss_mclk0_clk.c, "34.qcom,camera"),
 #endif /* defined(CONFIG_IMX081) */
@@ -4975,14 +4968,12 @@ static struct clk_lookup msm_clocks_8974pro_only[] __initdata = {
 #if defined(CONFIG_S5K4H5YB)
 	CLK_LOOKUP("cam_clk", camss_mclk0_clk.c, "10.qcom,camera"),
 #endif /* defined(CONFIG_S5K4H5YB) */
-#if 0
 	CLK_LOOKUP("cam_src_clk", mclk0_clk_src.c, "0.qcom,camera"),
 	CLK_LOOKUP("cam_src_clk", mclk1_clk_src.c, "1.qcom,camera"),
 	CLK_LOOKUP("cam_src_clk", mclk2_clk_src.c, "2.qcom,camera"),
 	CLK_LOOKUP("cam_clk", camss_mclk0_clk.c, "0.qcom,camera"),
 	CLK_LOOKUP("cam_clk", camss_mclk1_clk.c, "1.qcom,camera"),
 	CLK_LOOKUP("cam_clk", camss_mclk2_clk.c, "2.qcom,camera"),
-#endif
 };
 
 static struct clk_lookup msm_clocks_8974_only[] __initdata = {
