@@ -23,11 +23,10 @@
 		/* KYPD_SNS2/I/PU/H */
 		qcom,mode = <0>;            /* DIG_IN */
 		qcom,output-type = <0>;     /* CMOS */
-		qcom,invert = <0>;          /* DISABLE */
+		qcom,invert = <1>;			/* ENABLE */
 		qcom,pull = <2>;            /* PULL_UP_31P5 */
 		qcom,vin-sel = <2>;         /* S3 */
-		qcom,out-strength = <3>;    /* HIGH */
-		qcom,src-sel = <2>;         /* FUNC_1 */
+		qcom,src-sel = <0>;			/* CONSTANT */
 		qcom,master-en = <1>;       /* ENABLE */
 	};
 
@@ -41,11 +40,10 @@
 		/* KYPD_SNS5/I/PU/H */
 		qcom,mode = <0>;            /* DIG_IN */
 		qcom,output-type = <0>;     /* CMOS */
-		qcom,invert = <0>;          /* DISABLE */
+		qcom,invert = <1>;			/* ENABLe */
 		qcom,pull = <2>;            /* PULL_UP_31P5 */
 		qcom,vin-sel = <2>;         /* S3 */
-		qcom,out-strength = <3>;    /* HIGH */
-		qcom,src-sel = <2>;         /* FUNC_1 */
+		qcom,src-sel = <0>;			/* CONSTANT */
 		qcom,master-en = <1>;       /* ENABLE */
 	};
 
@@ -53,12 +51,35 @@
 	};
 
 	gpio@c600 { /* GPIO_07 */
+		qcom,mode = <0>;		/* DIG_IN */
+		qcom,output-type = <0>;		/* CMOS */
+		qcom,invert = <0>;		/* DISABLE */
+		qcom,pull = <4>;		/* PULL_DN */
+		qcom,vin-sel = <2>;		/* S3 */
+		qcom,src-sel = <0>;		/* CONSTANT */
+		qcom,master-en = <1>;		/* ENSABLE */
 	};
 
 	gpio@c700 { /* GPIO_08 */
+		qcom,mode = <1>;		/* DIG_OUT */
+		qcom,output-type = <0>;		/* CMOS */
+		qcom,invert = <0>;		/* DISABLE */
+		qcom,pull = <5>;		/* NO_PULL */
+		qcom,vin-sel = <2>;		/* S3 */
+		qcom,out-strength = <1>;	/* LOW */
+		qcom,src-sel = <0>;		/* CONSTANT */
+		qcom,master-en = <1>;		/* ENSABLE */
 	};
 
 	gpio@c800 { /* GPIO_09 */
+		qcom,mode = <1>;		/* DIG_OUT */
+		qcom,output-type = <0>;		/* CMOS */
+		qcom,invert = <0>;		/* DISABLE */
+		qcom,pull = <5>;		/* NO_PULL */
+		qcom,vin-sel = <2>;		/* S3 */
+		qcom,out-strength = <1>;	/* LOW */
+		qcom,src-sel = <0>;		/* CONSTANT */
+		qcom,master-en = <1>;		/* ENSABLE */
 	};
 
 	gpio@c900 { /* GPIO_10 */
@@ -83,7 +104,15 @@
 	};
 
 	gpio@d000 { /* GPIO_17 */
-		/* DIVCLK3 -> Not assigned */
+		/* SLEEP_CLK3 */
+		qcom,mode = <1>;		/* DIG_OUT */
+		qcom,output-type = <0>;		/* CMOS */
+		qcom,invert = <0>;		/* DISABLE */
+		qcom,pull = <5>;		/* NO_PULL */
+		qcom,vin-sel = <2>;		/* S3 */
+		qcom,out-strength = <1>;	/* LOW */
+		qcom,src-sel = <3>;		/* QPNP_PIN_SEL_FUNC_2 */
+		qcom,master-en = <1>;		/* ENSABLE */
 	};
 
 	gpio@d100 { /* GPIO_18 */
@@ -99,6 +128,13 @@
 	};
 
 	gpio@d200 { /* GPIO_19 */
+		qcom,mode = <0>;		/* DIG_IN */
+		qcom,output-type = <0>;		/* CMOS */
+		qcom,invert = <0>;		/* DISABLE */
+		qcom,pull = <4>;		/* PULL_DN */
+		qcom,vin-sel = <2>;		/* S3 */
+		qcom,src-sel = <0>;		/* CONSTANT */
+		qcom,master-en = <1>;		/* ENSABLE */
 	};
 
 	gpio@d300 { /* GPIO_20 */
@@ -111,6 +147,14 @@
 	};
 
 	gpio@d600 { /* GPIO_23 */
+		qcom,mode = <1>;		/* DIG_OUT */
+		qcom,output-type = <0>;		/* CMOS */
+		qcom,invert = <0>;		/* DISABLE */
+		qcom,pull = <5>;		/* NO_PULL */
+		qcom,vin-sel = <2>;		/* S3 */
+		qcom,out-strength = <1>;	/* LOW */
+		qcom,src-sel = <0>;		/* CONSTANT */
+		qcom,master-en = <1>;		/* ENSABLE */
 	};
 
 	gpio@d700 { /* GPIO_24 */
@@ -151,6 +195,14 @@
 	};
 
 	gpio@e000 { /* GPIO_33 */
+		qcom,mode = <1>;		/* DIG_OUT */
+		qcom,output-type = <0>;		/* CMOS */
+		qcom,invert = <1>;		/* ENABLE */
+		qcom,pull = <5>;		/* NO_PULL */
+		qcom,vin-sel = <0>;		/* VPH */
+		qcom,out-strength = <3>;	/* HIGH */
+		qcom,src-sel = <0>;		/* CONSTANT */
+		qcom,master-en = <1>;		/* ENSABLE */
 	};
 
 	gpio@e100 { /* GPIO_34 */
@@ -276,9 +328,14 @@
 };
 
 &pm8941_l18 { /* 8941_l18 */
+//	regulator-always-on;
+	qcom,pull-down-enable = <1>;
+//	qcom,auto-mode-enable = <0>;
+	qcom,bypass-mode-enable = <0>;
 	regulator-min-microvolt = <2850000>;
 	regulator-max-microvolt = <2850000>;
 	qcom,init-voltage = <2850000>;
+	status = "okay";
 };
 
 &pm8941_l19 { /* 8941_l19 */
