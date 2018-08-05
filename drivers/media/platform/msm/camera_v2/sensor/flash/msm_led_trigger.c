@@ -16,10 +16,6 @@
 #include <linux/module.h>
 #include "msm_led_flash.h"
 
-/* SHLOCAL_CAMERA_DRIVERS-> */
-#include <sharp/shbatt_kerl.h>
-//extern int dwc3_otg_is_usb_host_running(bool);
-/* SHLOCAL_CAMERA_DRIVERS<- */
 
 #define FLASH_NAME "camera-led-flash"
 
@@ -60,15 +56,8 @@ static int32_t msm_led_trigger_config(struct msm_led_flash_ctrl_t *fctrl,
 {
 	int rc = 0;
 	struct msm_camera_led_cfg_t *cfg = (struct msm_camera_led_cfg_t *)data;
-/* SHLOCAL_CAMERA_DRIVERS-> */
-#if !defined(CONFIG_SHCAMERA_PICT)
 	uint32_t i;
 	uint32_t curr_l, max_curr_l;
-#else
-	int cap_p = 0;
-	int usb_host = 0;
-#endif
-/* SHLOCAL_CAMERA_DRIVERS<- */
 	CDBG("called led_state %d\n", cfg->cfgtype);
 
 	if (!fctrl) {
