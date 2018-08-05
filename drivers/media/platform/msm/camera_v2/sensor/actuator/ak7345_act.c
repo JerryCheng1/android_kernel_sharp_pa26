@@ -98,16 +98,9 @@ static void ak7345_act_parse_i2c_params(struct msm_actuator_ctrl_t *a_ctrl,
 	CDBG("Exit\n");
 }
 
-/* SHLOCAL_CAMERA_DRIVERS-> */
-#if 0
 static int32_t ak7345_act_init_focus(struct msm_actuator_ctrl_t *a_ctrl,
 	uint16_t size, enum msm_actuator_data_type type,
 	struct reg_settings_t *settings)
-#else
-static int32_t ak7345_act_init_focus(struct msm_actuator_ctrl_t *a_ctrl,
-	uint16_t size, struct reg_settings_t *settings)
-#endif
-/* SHLOCAL_CAMERA_DRIVERS<- */
 {
 	int32_t rc = -EFAULT;
 	int32_t i = 0;
@@ -117,15 +110,7 @@ static int32_t ak7345_act_init_focus(struct msm_actuator_ctrl_t *a_ctrl,
 	usleep_range(10000, 11000);
 	
 	for (i = 0; i < size; i++) {
-/* SHLOCAL_CAMERA_DRIVERS-> */
-#if 0
 		switch (type) {
-#else
-		settings[i].addr_type = MSM_ACTUATOR_BYTE_ADDR;
-		settings[i].data_type = MSM_ACTUATOR_BYTE_DATA;
-		switch (settings[i].data_type) {
-#endif
-/* SHLOCAL_CAMERA_DRIVERS<- */
 		case MSM_ACTUATOR_BYTE_DATA:
 			rc = a_ctrl->i2c_client.i2c_func_tbl->i2c_write(
 				&a_ctrl->i2c_client,
@@ -139,13 +124,7 @@ static int32_t ak7345_act_init_focus(struct msm_actuator_ctrl_t *a_ctrl,
 				settings[i].reg_data, MSM_CAMERA_I2C_WORD_DATA);
 			break;
 		default:
-/* SHLOCAL_CAMERA_DRIVERS-> */
-#if 0
 			pr_err("Unsupport data type: %d\n", type);
-#else
-			pr_err("Unsupport data type\n");
-#endif
-/* SHLOCAL_CAMERA_DRIVERS<- */
 			break;
 		}
 		if (rc < 0)
