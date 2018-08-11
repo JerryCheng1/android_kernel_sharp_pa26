@@ -1347,6 +1347,17 @@ static struct msm_hsl_port msm_hsl_uart_ports[] = {
 			.line = 2,
 		},
 	},
+#if defined(CONFIG_SERIAL_EXPAND_PORT_SH)
+	{
+		.uart = {
+			.iotype = UPIO_MEM,
+			.ops = &msm_hsl_uart_pops,
+			.flags = UPF_BOOT_AUTOCONF,
+			.fifosize = 64,
+			.line = 3,
+		},
+	},
+#endif	/* defined(CONFIG_SERIAL_EXPAND_PORT_SH) */
 };
 
 #define UART_NR	ARRAY_SIZE(msm_hsl_uart_ports)

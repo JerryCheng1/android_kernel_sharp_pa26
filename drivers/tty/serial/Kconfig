@@ -1390,4 +1390,8 @@ config SERIAL_EFM32_UART_CONSOLE
 	depends on SERIAL_EFM32_UART=y
 	select SERIAL_CORE_CONSOLE
 
+config SERIAL_EXPAND_PORT_SH
+	bool "SERIAL customize expand number of ports"
+	default n
+
 endmenu
