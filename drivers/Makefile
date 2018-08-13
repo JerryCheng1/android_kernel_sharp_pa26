@@ -132,6 +132,8 @@ obj-$(CONFIG_SHDISP)  += sharp/shdisp/
 obj-$(CONFIG_SHRECEIVER_LM48560)      += sharp/shspamp/
 #SH_AUDIO_DRIVER <= 09-101
 
+obj-$(CONFIG_BATTERY_SH)	+= sharp/shbatt/
+obj-$(CONFIG_BATTERY_SH)	+= sharp/shchg/
 obj-$(CONFIG_HWSPINLOCK)	+= hwspinlock/
 obj-$(CONFIG_NFC)		+= nfc/
 obj-$(CONFIG_IOMMU_SUPPORT)	+= iommu/

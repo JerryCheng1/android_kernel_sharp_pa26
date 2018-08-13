@@ -33,6 +33,10 @@
 #include <linux/platform_device.h>
 #include <linux/wakelock.h>
 
+#ifdef CONFIG_BATTERY_SH
+#include <linux/qpnp/qpnp-api.h>
+#endif /* CONFIG_BATTERY_SH */
+
 /* QPNP IADC register definition */
 #define QPNP_IADC_REVISION1				0x0
 #define QPNP_IADC_REVISION2				0x1
@@ -70,6 +74,9 @@
 #define QPNP_ADC_DEC_RATIO_SEL_MASK			0xc
 #define QPNP_ADC_DIG_DEC_RATIO_SEL_SHIFT		2
 
+#ifdef CONFIG_BATTERY_SH
+#define QPNP_HW_SETTLE_DELAY				0x51
+#endif /* CONFIG_BATTERY_SH */
 #define QPNP_CONV_REQ					0x52
 #define QPNP_CONV_REQ_SET				BIT(7)
 #define QPNP_CONV_SEQ_CTL				0x54
@@ -136,6 +143,82 @@
 #define QPNP_IADC_RSENSE_DEFAULT_TYPEB_GF		9000000
 #define QPNP_IADC_RSENSE_DEFAULT_TYPEB_SMIC		9700000
 
+#ifdef CONFIG_BATTERY_SH
+
+#ifndef MAX
+#define MAX(a,b)	(((a) > (b)) ? (a) : (b))
+#endif
+#ifndef MIN
+#define MIN(a,b)	(((a) < (b)) ? (a) : (b))
+#endif
+
+#define QPNP_IADC_CALIB_SAMPLING_COUNT	16
+
+static uint debug_read_gain[QPNP_IADC_CALIB_SAMPLING_COUNT] = {0,};
+module_param_named(read_gain_0,  debug_read_gain[0],  uint, S_IRUSR);
+module_param_named(read_gain_1,  debug_read_gain[1],  uint, S_IRUSR);
+module_param_named(read_gain_2,  debug_read_gain[2],  uint, S_IRUSR);
+module_param_named(read_gain_3,  debug_read_gain[3],  uint, S_IRUSR);
+module_param_named(read_gain_4,  debug_read_gain[4],  uint, S_IRUSR);
+module_param_named(read_gain_5,  debug_read_gain[5],  uint, S_IRUSR);
+module_param_named(read_gain_6,  debug_read_gain[6],  uint, S_IRUSR);
+module_param_named(read_gain_7,  debug_read_gain[7],  uint, S_IRUSR);
+module_param_named(read_gain_8,  debug_read_gain[8],  uint, S_IRUSR);
+module_param_named(read_gain_9,  debug_read_gain[9],  uint, S_IRUSR);
+module_param_named(read_gain_10, debug_read_gain[10], uint, S_IRUSR);
+module_param_named(read_gain_11, debug_read_gain[11], uint, S_IRUSR);
+module_param_named(read_gain_12, debug_read_gain[12], uint, S_IRUSR);
+module_param_named(read_gain_13, debug_read_gain[13], uint, S_IRUSR);
+module_param_named(read_gain_14, debug_read_gain[14], uint, S_IRUSR);
+module_param_named(read_gain_15, debug_read_gain[15], uint, S_IRUSR);
+
+static uint debug_read_offset[QPNP_IADC_CALIB_SAMPLING_COUNT] = {0,};
+module_param_named(read_offset_0,  debug_read_offset[0],  uint, S_IRUSR);
+module_param_named(read_offset_1,  debug_read_offset[1],  uint, S_IRUSR);
+module_param_named(read_offset_2,  debug_read_offset[2],  uint, S_IRUSR);
+module_param_named(read_offset_3,  debug_read_offset[3],  uint, S_IRUSR);
+module_param_named(read_offset_4,  debug_read_offset[4],  uint, S_IRUSR);
+module_param_named(read_offset_5,  debug_read_offset[5],  uint, S_IRUSR);
+module_param_named(read_offset_6,  debug_read_offset[6],  uint, S_IRUSR);
+module_param_named(read_offset_7,  debug_read_offset[7],  uint, S_IRUSR);
+module_param_named(read_offset_8,  debug_read_offset[8],  uint, S_IRUSR);
+module_param_named(read_offset_9,  debug_read_offset[9],  uint, S_IRUSR);
+module_param_named(read_offset_10, debug_read_offset[10], uint, S_IRUSR);
+module_param_named(read_offset_11, debug_read_offset[11], uint, S_IRUSR);
+module_param_named(read_offset_12, debug_read_offset[12], uint, S_IRUSR);
+module_param_named(read_offset_13, debug_read_offset[13], uint, S_IRUSR);
+module_param_named(read_offset_14, debug_read_offset[14], uint, S_IRUSR);
+module_param_named(read_offset_15, debug_read_offset[15], uint, S_IRUSR);
+
+static uint debug_calc_gain;
+module_param_named(calc_gain, debug_calc_gain, uint, S_IRUSR);
+
+static uint debug_calc_offset;
+module_param_named(calc_offset, debug_calc_offset, uint, S_IRUSR);
+
+#define QPNP_IADC_CALIB_CHECK_SECONDS	100000
+
+static int check_iadc_calib = 1;
+module_param_named(iadc_calib, check_iadc_calib, int, S_IRUSR | S_IWUSR);
+
+static int check_pmic_temp;
+module_param_named(pmic_temp, check_pmic_temp, int, S_IRUSR);
+
+static int debug_decimation = -1;
+module_param_named(decimation, debug_decimation, int, S_IRUSR | S_IWUSR);
+
+static int debug_fast_avg_ctl = -1;
+module_param_named(fast_avg_ctl, debug_fast_avg_ctl, int, S_IRUSR | S_IWUSR);
+
+static int debug_fugcal_correct = 0;
+module_param_named(fugcal_correct, debug_fugcal_correct, int, S_IRUSR | S_IWUSR);
+
+#if 1
+#define QPNP_IADC_ENABLE_NOTIFY_PMIC_TEMP
+#endif
+
+#endif /* CONFIG_BATTERY_SH */
+
 struct qpnp_iadc_comp {
 	bool	ext_rsense;
 	u8	id;
@@ -166,7 +249,16 @@ struct qpnp_iadc_chip {
 	bool					rds_trim_default_check;
 	int32_t					rsense_workaround_value;
 	struct sensor_device_attribute		sens_attr[0];
+
+#ifdef CONFIG_BATTERY_SH
+	bool					iadc_calc_gain_and_offset;
+	bool					iadc_update_pmic_temp;
+#endif /* CONFIG_BATTERY_SH */
 };
+
+#ifdef CONFIG_BATTERY_SH
+static struct qpnp_iadc_chip *qpnp_iadc;
+#endif /* CONFIG_BATTERY_SH */
 
 LIST_HEAD(qpnp_iadc_device_list);
 
@@ -770,6 +862,9 @@ static int32_t qpnp_iadc_configure(struct qpnp_iadc_chip *iadc,
 	u8 status1 = 0;
 	uint32_t count = 0;
 	int32_t rc = 0;
+#ifdef CONFIG_BATTERY_SH
+	u8 set_hw_settle_delay;
+#endif /* CONFIG_BATTERY_SH */
 
 	qpnp_iadc_ch_sel_reg = channel;
 
@@ -795,15 +890,46 @@ static int32_t qpnp_iadc_configure(struct qpnp_iadc_chip *iadc,
 		return rc;
 	}
 
+#ifndef CONFIG_BATTERY_SH
 	rc = qpnp_iadc_write_reg(iadc, QPNP_ADC_DIG_PARAM,
 						qpnp_iadc_dig_param_reg);
+#else  /* CONFIG_BATTERY_SH */
+	if (debug_decimation < 0)
+	{
+		debug_decimation = iadc->adc->amux_prop->decimation;
+	}
+	/* Qualcomm Bug!! */
+//	qpnp_iadc_dig_param_reg |= debug_decimation << QPNP_IADC_DEC_RATIO_SEL;
+	qpnp_iadc_dig_param_reg |= (debug_decimation & QPNP_IADC_DEC_RATIO_SEL) << 2;
+	rc = qpnp_iadc_write_reg(iadc, QPNP_ADC_DIG_PARAM, qpnp_iadc_dig_param_reg);
+#endif /* CONFIG_BATTERY_SH */
 	if (rc) {
 		pr_err("qpnp adc read adc failed with %d\n", rc);
 		return rc;
 	}
 
+#ifndef CONFIG_BATTERY_SH
+	rc = qpnp_iadc_write_reg(iadc, QPNP_HW_SETTLE_DELAY,
+				iadc->adc->amux_prop->hw_settle_time);
+#else  /* CONFIG_BATTERY_SH */
+	set_hw_settle_delay = 0x02; /* HW_SETTLE_DELAY_200US */
+	rc = qpnp_iadc_write_reg(iadc, QPNP_HW_SETTLE_DELAY, set_hw_settle_delay);
+#endif /* CONFIG_BATTERY_SH */
+	if (rc < 0) {
+		pr_err("qpnp adc configure error for hw settling time setup\n");
+		return rc;
+	}
+
+#ifndef CONFIG_BATTERY_SH
 	rc = qpnp_iadc_write_reg(iadc, QPNP_FAST_AVG_CTL,
 					iadc->adc->amux_prop->fast_avg_setup);
+#else  /* CONFIG_BATTERY_SH */
+	if (debug_fast_avg_ctl < 0)
+	{
+		debug_fast_avg_ctl = iadc->adc->amux_prop->fast_avg_setup;
+	}
+	rc = qpnp_iadc_write_reg(iadc, QPNP_FAST_AVG_CTL, debug_fast_avg_ctl);
+#endif /* CONFIG_BATTERY_SH */
 	if (rc < 0) {
 		pr_err("qpnp adc fast averaging configure error\n");
 		return rc;
@@ -823,6 +949,7 @@ static int32_t qpnp_iadc_configure(struct qpnp_iadc_chip *iadc,
 	}
 
 	if (iadc->iadc_poll_eoc) {
+#ifndef CONFIG_BATTERY_SH
 		while (status1 != QPNP_STATUS1_EOC) {
 			rc = qpnp_iadc_read_reg(iadc, QPNP_STATUS1, &status1);
 			if (rc < 0)
@@ -840,6 +967,28 @@ static int32_t qpnp_iadc_configure(struct qpnp_iadc_chip *iadc,
 				return rc;
 			}
 		}
+#else  /* CONFIG_BATTERY_SH */
+		while (1) {
+			usleep_range(QPNP_ADC_CONV_TIME_MIN,
+					QPNP_ADC_CONV_TIME_MAX);
+			rc = qpnp_iadc_read_reg(iadc, QPNP_STATUS1, &status1);
+			if (rc < 0)
+				return rc;
+			status1 &= QPNP_STATUS1_REQ_STS_EOC_MASK;
+			if (status1 == QPNP_STATUS1_EOC) {
+				break;
+			}
+			count++;
+			if (count > QPNP_ADC_ERR_COUNT) {
+				pr_err("retry error exceeded\n");
+				rc = qpnp_iadc_status_debug(iadc);
+				if (rc < 0)
+					pr_err("IADC status debug failed\n");
+				rc = -EINVAL;
+				return rc;
+			}
+		}
+#endif /* CONFIG_BATTERY_SH */
 	} else {
 		rc = wait_for_completion_timeout(
 				&iadc->adc->adc_rslt_completion,
@@ -900,6 +1049,7 @@ static int32_t qpnp_convert_raw_offset_voltage(struct qpnp_iadc_chip *iadc)
 	return 0;
 }
 
+#ifndef CONFIG_BATTERY_SH
 #define IADC_IDEAL_RAW_GAIN	3291
 int32_t qpnp_iadc_calibrate_for_trim(struct qpnp_iadc_chip *iadc,
 							bool batfet_closed)
@@ -981,6 +1131,11 @@ int32_t qpnp_iadc_calibrate_for_trim(struct qpnp_iadc_chip *iadc,
 	pr_debug("raw gain:0x%x, raw offset:0x%x\n",
 		iadc->adc->calib.gain_raw, iadc->adc->calib.offset_raw);
 
+#ifdef CONFIG_BATTERY_SH
+	debug_calc_gain = iadc->adc->calib.gain_raw;
+	debug_calc_offset = iadc->adc->calib.offset_raw;
+#endif /* CONFIG_BATTERY_SH */
+
 	rc = qpnp_convert_raw_offset_voltage(iadc);
 	if (rc < 0) {
 		pr_err("qpnp raw_voltage conversion failed\n");
@@ -1029,9 +1184,235 @@ fail:
 	return rc;
 }
 EXPORT_SYMBOL(qpnp_iadc_calibrate_for_trim);
+#else  /* CONFIG_BATTERY_SH */
+static int32_t qpnp_iadc_calib_configure(bool batfet_closed, uint16_t *gain, uint16_t *offset)
+{
+	int32_t rc = 0;
+	uint16_t gain_raw, offset_raw;
+	uint32_t mode_sel = 0;
+
+	if (qpnp_iadc == NULL)
+		goto fail;
+
+	rc = qpnp_iadc_configure(qpnp_iadc, GAIN_CALIBRATION_17P857MV,
+						&gain_raw, mode_sel);
+	if (rc < 0) {
+		pr_err("qpnp adc calib gain_raw read error %d\n", rc);
+		goto fail;
+	}
+
+	/*
+	 * there is a features in the BMS where if the batfet is opened
+	 * the BMS reads from INTERNAL_RSENSE (channel 0) actually go to
+	 * OFFSET_CALIBRATION_CSP_CSN (channel 5). Hence if batfet is opened
+	 * we have to calibrate based on OFFSET_CALIBRATION_CSP_CSN even for
+	 * internal rsense.
+	 */
+	if (!batfet_closed || qpnp_iadc->external_rsense) {
+		/* external offset calculation */
+		rc = qpnp_iadc_configure(qpnp_iadc, OFFSET_CALIBRATION_CSP_CSN,
+						&offset_raw, mode_sel);
+		if (rc < 0) {
+			pr_err("qpnp adc result read failed with %d\n", rc);
+			goto fail;
+		}
+	} else {
+		/* internal offset calculation */
+		rc = qpnp_iadc_configure(qpnp_iadc, OFFSET_CALIBRATION_CSP2_CSN2,
+						&offset_raw, mode_sel);
+		if (rc < 0) {
+			pr_err("qpnp adc result read failed with %d\n", rc);
+			goto fail;
+		}
+	}
+
+	*gain = gain_raw;
+	*offset = offset_raw;
+
+fail:
+	return rc;
+}
+
+static int32_t qpnp_iadc_calib_write_reg(uint16_t gain, uint16_t offset)
+{
+	uint8_t rslt_lsb, rslt_msb;
+	int32_t rc = 0;
+	uint16_t raw_data;
+
+	if (qpnp_iadc == NULL)
+		goto fail;
+
+	qpnp_iadc->adc->calib.gain_raw = gain;
+	qpnp_iadc->adc->calib.offset_raw = offset;
+	raw_data = offset;
+
+	rc = qpnp_convert_raw_offset_voltage(qpnp_iadc);
+	if (rc < 0) {
+		pr_err("qpnp raw_voltage conversion failed\n");
+		goto fail;
+	}
+
+	rslt_msb = (raw_data & QPNP_RAW_CODE_16_BIT_MSB_MASK) >>
+							QPNP_BIT_SHIFT_8;
+	rslt_lsb = raw_data & QPNP_RAW_CODE_16_BIT_LSB_MASK;
+
+	pr_debug("trim values:lsb:0x%x and msb:0x%x\n", rslt_lsb, rslt_msb);
+
+	rc = qpnp_iadc_write_reg(qpnp_iadc, QPNP_IADC_SEC_ACCESS,
+					QPNP_IADC_SEC_ACCESS_DATA);
+	if (rc < 0) {
+		pr_err("qpnp iadc configure error for sec access\n");
+		goto fail;
+	}
+
+	rc = qpnp_iadc_write_reg(qpnp_iadc, QPNP_IADC_MSB_OFFSET,
+						rslt_msb);
+	if (rc < 0) {
+		pr_err("qpnp iadc configure error for MSB write\n");
+		goto fail;
+	}
+
+	rc = qpnp_iadc_write_reg(qpnp_iadc, QPNP_IADC_SEC_ACCESS,
+					QPNP_IADC_SEC_ACCESS_DATA);
+	if (rc < 0) {
+		pr_err("qpnp iadc configure error for sec access\n");
+		goto fail;
+	}
+
+	rc = qpnp_iadc_write_reg(qpnp_iadc, QPNP_IADC_LSB_OFFSET,
+						rslt_lsb);
+	if (rc < 0) {
+		pr_err("qpnp iadc configure error for LSB write\n");
+		goto fail;
+	}
+
+fail:
+	return rc;
+}
+
+int32_t qpnp_iadc_calibrate_for_trim_sh(void)
+{
+	int32_t rc = 0;
+	int idx, cnt;
+	uint16_t gain_raw, offset_raw;
+	uint32_t gain_calc = 0, offset_calc = 0;
+	uint16_t gain_raw_min = 0xFFFF, gain_raw_max = 0;
+	uint16_t offset_raw_min = 0xFFFF, offset_raw_max = 0;
+	/* calibration is executable, when batfet is closed */
+	bool batfet_closed = true;
+
+	if (qpnp_iadc == NULL)
+		return -EPROBE_DEFER;
+
+	qpnp_chg_batfet_status(&batfet_closed);
+	if (!batfet_closed)
+	{
+		if (check_iadc_calib)
+		{
+			pr_info("batfet is opened.\n");
+		}
+		else
+		{
+			pr_debug("batfet is opened.\n");
+		}
+		/* Operation would block = Try again (EAGAIN) */
+		return -EWOULDBLOCK;
+	}
+
+	mutex_lock(&qpnp_iadc->adc->adc_lock);
+
+	if (qpnp_iadc->iadc_poll_eoc) {
+		pr_debug("acquiring iadc eoc wakelock\n");
+		pm_stay_awake(qpnp_iadc->dev);
+	}
+
+	cnt = QPNP_IADC_CALIB_SAMPLING_COUNT;
+	for (idx = 0; idx < cnt; idx++)
+	{
+		rc = qpnp_iadc_calib_configure(batfet_closed, &gain_raw, &offset_raw);
+		if (rc < 0)
+		{
+			pr_err("qpnp iadc calib configure error %d idx %d\n", rc, idx);
+			goto fail;
+		}
+
+		gain_calc += gain_raw;
+		offset_calc += offset_raw;
+
+		/* for test */
+		gain_raw_min = MIN(gain_raw, gain_raw_min);
+		gain_raw_max = MAX(gain_raw, gain_raw_max);
+		offset_raw_min = MIN(offset_raw, offset_raw_min);
+		offset_raw_max = MAX(offset_raw, offset_raw_max);
+
+		pr_debug("[%02d] gain=%5d offset=%5d\n", idx, gain_raw, offset_raw);
+
+		debug_read_gain[idx] = gain_raw;
+		debug_read_offset[idx] = offset_raw;
+	}
+
+	gain_calc /= cnt;
+	offset_calc /= cnt;
+
+	if (check_iadc_calib)
+	{
+		pr_info("iadc gain=%5d (%5d-%5d) offset=%5d (%5d-%5d) temp=%d.%03d\n",
+			gain_calc, gain_raw_min, gain_raw_max,
+			offset_calc, offset_raw_min, offset_raw_max,
+			check_pmic_temp / 1000,
+			check_pmic_temp % 1000);
+	}
+	else
+	{
+		pr_debug("iadc gain=%5d (%5d-%5d) offset=%5d (%5d-%5d) temp=%d.%03d\n",
+			gain_calc, gain_raw_min, gain_raw_max,
+			offset_calc, offset_raw_min, offset_raw_max,
+			check_pmic_temp / 1000,
+			check_pmic_temp % 1000);
+	}
+
+	debug_calc_gain = gain_calc;
+	debug_calc_offset = offset_calc;
+
+	rc = qpnp_iadc_calib_write_reg(gain_calc, offset_calc);
+	if (rc < 0)
+	{
+		pr_err("qpnp iadc calib write reg error %d for average %d\n", rc, cnt);
+		goto fail;
+	}
+
+fail:
+	if (qpnp_iadc->iadc_poll_eoc) {
+		pr_debug("releasing iadc eoc wakelock\n");
+		pm_relax(qpnp_iadc->dev);
+	}
+	mutex_unlock(&qpnp_iadc->adc->adc_lock);
+	return rc;
+}
+EXPORT_SYMBOL(qpnp_iadc_calibrate_for_trim_sh);
+
+int32_t qpnp_iadc_calibrate_for_trim(struct qpnp_iadc_chip *iadc,
+										bool batfet_closed)
+{
+	int32_t rc = 0;
+
+	if (!iadc->iadc_calc_gain_and_offset)
+	{
+		rc = qpnp_iadc_calibrate_for_trim_sh();
+		if (rc == 0)
+		{
+			iadc->iadc_calc_gain_and_offset = true;
+		}
+	}
+
+	return rc;
+}
+EXPORT_SYMBOL(qpnp_iadc_calibrate_for_trim);
+#endif /* CONFIG_BATTERY_SH */
 
 static void qpnp_iadc_work(struct work_struct *work)
 {
+#ifndef CONFIG_BATTERY_SH
 	struct qpnp_iadc_chip *iadc = container_of(work,
 			struct qpnp_iadc_chip, iadc_work.work);
 	int rc = 0;
@@ -1045,6 +1426,13 @@ static void qpnp_iadc_work(struct work_struct *work)
 	schedule_delayed_work(&iadc->iadc_work,
 		round_jiffies_relative(msecs_to_jiffies
 				(QPNP_IADC_CALIB_SECONDS)));
+#else  /* CONFIG_BATTERY_SH */
+	if (check_iadc_calib > 0)
+	{
+		pr_info("iadc calib gain/offset check is stopped.\n");
+		check_iadc_calib = 0;
+	}
+#endif /* CONFIG_BATTERY_SH */
 	return;
 }
 
@@ -1133,6 +1521,7 @@ EXPORT_SYMBOL(qpnp_iadc_get_rsense);
 
 static int32_t qpnp_check_pmic_temp(struct qpnp_iadc_chip *iadc)
 {
+#ifndef CONFIG_BATTERY_SH
 	struct qpnp_vadc_result result_pmic_therm;
 	int64_t die_temp_offset;
 	int rc = 0;
@@ -1140,6 +1529,10 @@ static int32_t qpnp_check_pmic_temp(struct qpnp_iadc_chip *iadc)
 	rc = qpnp_vadc_read(iadc->vadc_dev, DIE_TEMP, &result_pmic_therm);
 	if (rc < 0)
 		return rc;
+
+#ifdef CONFIG_BATTERY_SH
+	check_pmic_temp = result_pmic_therm.physical;
+#endif /* CONFIG_BATTERY_SH */
 
 	die_temp_offset = result_pmic_therm.physical -
 			iadc->die_temp;
@@ -1156,7 +1549,52 @@ static int32_t qpnp_check_pmic_temp(struct qpnp_iadc_chip *iadc)
 	}
 
 	return rc;
+#else  /* CONFIG_BATTERY_SH */
+	struct qpnp_vadc_result result_pmic_therm;
+	int rc = 0;
+
+	if (qpnp_iadc_is_valid(iadc) < 0) {
+		return -EPROBE_DEFER;
+	}
+
+	if (!iadc->iadc_update_pmic_temp) {
+		rc = qpnp_vadc_read(iadc->vadc_dev, DIE_TEMP, &result_pmic_therm);
+		if (rc < 0) {
+			pr_err("read pmic_temp error = %d\n", rc);
+			return rc;
+		}
+
+		qpnp_iadc_notify_pmic_temp(result_pmic_therm.physical);
+	}
+
+	return 0;
+#endif /* CONFIG_BATTERY_SH */
 }
+
+#ifdef CONFIG_BATTERY_SH
+int32_t qpnp_iadc_notify_pmic_temp(int pmic_temp)
+{
+	struct qpnp_iadc_chip *iadc = qpnp_iadc;
+
+	if (qpnp_iadc_is_valid(iadc) < 0) {
+		return -EPROBE_DEFER;
+	}
+
+	iadc->die_temp = pmic_temp;
+#ifdef QPNP_IADC_ENABLE_NOTIFY_PMIC_TEMP
+	iadc->iadc_update_pmic_temp = true;
+#endif /* QPNP_IADC_ENABLE_NOTIFY_PMIC_TEMP */
+
+	if (check_iadc_calib)
+	{
+		pr_info("pmic_temp = %d -> %d\n", check_pmic_temp, pmic_temp);
+	}
+	check_pmic_temp = pmic_temp;
+
+	return 0;
+}
+EXPORT_SYMBOL(qpnp_iadc_notify_pmic_temp);
+#endif /* CONFIG_BATTERY_SH */
 
 int32_t qpnp_iadc_read(struct qpnp_iadc_chip *iadc,
 				enum qpnp_iadc_channels channel,
@@ -1226,7 +1664,20 @@ int32_t qpnp_iadc_read(struct qpnp_iadc_chip *iadc,
 	result_current = result->result_uv;
 	result_current *= QPNP_IADC_NANO_VOLTS_FACTOR;
 	/* Intentional fall through. Process the result w/o comp */
+#ifndef CONFIG_BATTERY_SH
 	do_div(result_current, rsense_u_ohms);
+#else  /* CONFIG_BATTERY_SH */
+	if (debug_fugcal_correct)
+	{
+		result_current = qpnp_adc_scale_uv_to_ma(result->result_uv, rsense_u_ohms);
+		/* convert from mA to uA */
+		result_current = (int)result_current * 1000;
+	}
+	else
+	{
+		do_div(result_current, rsense_u_ohms);
+	}
+#endif /* CONFIG_BATTERY_SH */
 
 	if (sign) {
 		result->result_uv = -result->result_uv;
@@ -1240,6 +1691,9 @@ int32_t qpnp_iadc_read(struct qpnp_iadc_chip *iadc,
 	result_current *= -1;
 
 	result->result_ua = (int32_t) result_current;
+#ifdef CONFIG_BATTERY_SH
+	result->adc_code = raw_data;
+#endif /* CONFIG_BATTERY_SH */
 fail:
 	if (iadc->iadc_poll_eoc) {
 		pr_debug("releasing iadc eoc wakelock\n");
@@ -1422,6 +1876,35 @@ static ssize_t qpnp_iadc_show(struct device *dev,
 					"Result:%d\n", result.result_ua);
 }
 
+#ifdef CONFIG_BATTERY_SH
+int32_t qpnp_iadc_read_sh(enum qpnp_iadc_channels channel,
+				struct qpnp_iadc_result *result)
+{
+	int32_t rc;
+	
+	if (qpnp_iadc == NULL)
+		return -EPROBE_DEFER;
+	
+	rc = qpnp_iadc_read(qpnp_iadc, channel, result);
+
+	return rc;
+}
+EXPORT_SYMBOL(qpnp_iadc_read_sh);
+
+int32_t qpnp_iadc_get_gain_and_offset_sh(struct qpnp_iadc_calib *result)
+{
+	int rc;
+
+	if (qpnp_iadc == NULL)
+		return -EPROBE_DEFER;
+	
+	rc = qpnp_iadc_get_gain_and_offset(qpnp_iadc, result);
+	
+	return rc;
+}
+EXPORT_SYMBOL(qpnp_iadc_get_gain_and_offset_sh);
+#endif /* CONFIG_BATTERY_SH */
+
 static struct sensor_device_attribute qpnp_adc_attr =
 	SENSOR_ATTR(NULL, S_IRUGO, qpnp_iadc_show, NULL, 0);
 
@@ -1465,6 +1948,10 @@ static int __devinit qpnp_iadc_probe(struct spmi_device *spmi)
 	struct device_node *child;
 	struct resource *res;
 	int rc, count_adc_channel_list = 0, i = 0;
+
+#ifdef CONFIG_BATTERY_SH
+	pr_err("qpnp_iadc_probe() call\n");
+#endif /* CONFIG_BATTERY_SH */
 
 	for_each_child_of_node(node, child)
 		count_adc_channel_list++;
@@ -1575,6 +2062,9 @@ static int __devinit qpnp_iadc_probe(struct spmi_device *spmi)
 	}
 
 	dev_set_drvdata(&spmi->dev, iadc);
+#ifdef CONFIG_BATTERY_SH
+	qpnp_iadc = iadc;
+#endif /* CONFIG_BATTERY_SH */
 	list_add(&iadc->list, &qpnp_iadc_device_list);
 	rc = qpnp_iadc_calibrate_for_trim(iadc, true);
 	if (rc)
@@ -1583,9 +2073,16 @@ static int __devinit qpnp_iadc_probe(struct spmi_device *spmi)
 	if (iadc->iadc_poll_eoc)
 		device_init_wakeup(iadc->dev, 1);
 
+#ifndef CONFIG_BATTERY_SH
 	schedule_delayed_work(&iadc->iadc_work,
 			round_jiffies_relative(msecs_to_jiffies
 					(QPNP_IADC_CALIB_SECONDS)));
+#else  /* CONFIG_BATTERY_SH */
+	schedule_delayed_work(&iadc->iadc_work,
+			round_jiffies_relative(msecs_to_jiffies
+					(QPNP_IADC_CALIB_CHECK_SECONDS)));
+	pr_err("qpnp_iadc_probe() success\n");
+#endif /* CONFIG_BATTERY_SH */
 	return 0;
 fail:
 	for_each_child_of_node(node, child) {
@@ -1594,6 +2091,10 @@ fail:
 		i++;
 	}
 	hwmon_device_unregister(iadc->iadc_hwmon);
+#ifdef CONFIG_BATTERY_SH
+	qpnp_iadc = NULL;
+	pr_err("qpnp_iadc_probe() failure\n");
+#endif /* CONFIG_BATTERY_SH */
 
 	return rc;
 }
@@ -1615,6 +2116,9 @@ static int __devexit qpnp_iadc_remove(struct spmi_device *spmi)
 	if (iadc->iadc_poll_eoc)
 		pm_relax(iadc->dev);
 	dev_set_drvdata(&spmi->dev, NULL);
+#ifdef CONFIG_BATTERY_SH
+	qpnp_iadc = NULL;
+#endif /* CONFIG_BATTERY_SH */
 
 	return 0;
 }
@@ -1636,12 +2140,18 @@ static struct spmi_driver qpnp_iadc_driver = {
 
 static int __init qpnp_iadc_init(void)
 {
+#ifdef CONFIG_BATTERY_SH
+	pr_info("QPNP IADC INIT\n");
+#endif /* CONFIG_BATTERY_SH */
 	return spmi_driver_register(&qpnp_iadc_driver);
 }
 module_init(qpnp_iadc_init);
 
 static void __exit qpnp_iadc_exit(void)
 {
+#ifdef CONFIG_BATTERY_SH
+	pr_info("QPNP IADC EXIT\n");
+#endif /* CONFIG_BATTERY_SH */
 	spmi_driver_unregister(&qpnp_iadc_driver);
 }
 module_exit(qpnp_iadc_exit);

@@ -52,6 +52,10 @@
 #include "gadget.h"
 #include "debug.h"
 
+#ifdef CONFIG_BATTERY_SH
+#include <sharp/shchg_kerl.h>
+#define SH_REQ_OFFSET 1000000000
+#endif /* CONFIG_BATTERY_SH */
 /* ADC threshold values */
 static int adc_low_threshold = 700;
 module_param(adc_low_threshold, int, S_IRUGO | S_IWUSR);
@@ -2441,7 +2445,19 @@ static int dwc3_msm_power_set_property_usb(struct power_supply *psy,
 		mdwc->online = val->intval;
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
+#ifdef CONFIG_BATTERY_SH
+		if (val->intval < SH_REQ_OFFSET)
+		{
+			pr_debug("skip to set %duV\n", val->intval);
+			break;
+		}
+		else
+		{
+			mdwc->voltage_max = val->intval - SH_REQ_OFFSET;
+		}
+#else
 		mdwc->voltage_max = val->intval;
+#endif
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_MAX:
 		mdwc->current_max = val->intval;
@@ -2777,6 +2793,9 @@ dwc3_msm_ext_chg_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			pr_debug("%s:voltage request successful\n", __func__);
 		else
 			pr_debug("%s:voltage request failed\n", __func__);
+#ifdef CONFIG_BATTERY_SH
+		shchg_api_notify_hvdcp_change_result(!!val);
+#endif
 		break;
 	case MSM_USB_EXT_CHG_TYPE:
 		if (get_user(val, (int __user *)arg)) {
@@ -2789,6 +2808,9 @@ dwc3_msm_ext_chg_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			pr_debug("%s:charger is external charger\n", __func__);
 		else
 			pr_debug("%s:charger is not ext charger\n", __func__);
+#ifdef CONFIG_BATTERY_SH
+		shchg_api_notify_dcp_charger_type(!!val);
+#endif
 		break;
 	default:
 		ret = -EINVAL;

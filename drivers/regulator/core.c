@@ -3132,6 +3132,46 @@ static const struct file_operations reg_consumers_fops = {
 	.release	= single_release,
 };
 
+#ifdef CONFIG_BATTERY_SH
+static int reg_debug_always_on_get(void *data, u64 *val)
+{
+	struct regulator_dev *rdev = (struct regulator_dev *)data;
+
+	if (IS_ERR(data) || data == NULL) {
+		pr_err("Function Input Error %ld\n", PTR_ERR(data));
+		return -ENOMEM;
+	}
+
+	*val = 0;
+	if (rdev->constraints) {
+		*val = rdev->constraints->always_on;
+	}
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(reg_always_on_fops, reg_debug_always_on_get,
+			NULL, "%llu\n");
+
+static int reg_debug_boot_on_get(void *data, u64 *val)
+{
+	struct regulator_dev *rdev = (struct regulator_dev *)data;
+
+	if (IS_ERR(data) || data == NULL) {
+		pr_err("Function Input Error %ld\n", PTR_ERR(data));
+		return -ENOMEM;
+	}
+
+	*val = 0;
+	if (rdev->constraints) {
+		*val = rdev->constraints->boot_on;
+	}
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(reg_boot_on_fops, reg_debug_boot_on_get,
+			NULL, "%llu\n");
+#endif /* CONFIG_BATTERY_SH */
+
 static void rdev_init_debugfs(struct regulator_dev *rdev)
 {
 	struct dentry *err_ptr = NULL;
@@ -3158,6 +3198,12 @@ static void rdev_init_debugfs(struct regulator_dev *rdev)
 			   &rdev->open_count);
 	debugfs_create_file("consumers", 0444, rdev->debugfs, rdev,
 			    &reg_consumers_fops);
+#ifdef CONFIG_BATTERY_SH
+	debugfs_create_file("always_on", 0444, rdev->debugfs,
+			   rdev, &reg_always_on_fops);
+	debugfs_create_file("boot_on", 0444, rdev->debugfs,
+			   rdev, &reg_boot_on_fops);
+#endif /* CONFIG_BATTERY_SH */
 
 	reg = regulator_get(NULL, rdev->desc->name);
 	if (IS_ERR(reg) || reg == NULL) {

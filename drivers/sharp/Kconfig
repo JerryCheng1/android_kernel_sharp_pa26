@@ -6,7 +6,7 @@ menu "SHARP Device Drivers"
 
 #source "drivers/sharp/shdiag/Kconfig"
 source "drivers/sharp/shdisp/Kconfig"
-#source "drivers/sharp/shbatt/Kconfig"
+source "drivers/sharp/shbatt/Kconfig"
 #source "drivers/sharp/mfc/Kconfig"
 #source "drivers/sharp/nfc/Kconfig"
 #source "drivers/sharp/shmds/Kconfig"

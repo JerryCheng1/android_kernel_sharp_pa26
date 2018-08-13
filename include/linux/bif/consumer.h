@@ -595,6 +595,10 @@ int bif_ctrl_set_bus_period(struct bif_ctrl *ctrl, int period_ns);
 int bif_ctrl_get_bus_state(struct bif_ctrl *ctrl);
 int bif_ctrl_set_bus_state(struct bif_ctrl *ctrl, enum bif_bus_state state);
 
+#ifdef CONFIG_BATTERY_SH
+int bif_slave_get_unique_id(struct bif_slave *slave, u8 *unique_id);
+#endif /* CONFIG_BATTERY_SH */
+
 #else
 
 static inline int bif_request_irq(struct bif_slave *slave, unsigned int task,
@@ -722,6 +726,11 @@ static inline int bif_ctrl_get_bus_state(struct bif_ctrl *ctrl)
 static inline int bif_ctrl_set_bus_state(struct bif_ctrl *ctrl,
 				enum bif_bus_state state)
 { return -EPERM; }
+
+#ifdef CONFIG_BATTERY_SH
+static inline int bif_slave_get_unique_id(struct bif_slave *slave, u8 *unique_id)
+{ return -EPERM;}
+#endif /* CONFIG_BATTERY_SH */
 
 #endif
 

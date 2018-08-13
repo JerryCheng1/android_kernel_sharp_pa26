@@ -37,8 +37,13 @@
 #include <linux/qpnp/pin.h>
 
 #ifdef CONFIG_MACH_REN
+#ifdef CONFIG_BATTERY_SH
+#include <linux/debugfs.h>
 #include <linux/qpnp/qpnp-api.h>
-#endif /* CONFIG_MACH_EBZ */
+#include <sharp/shchg_kerl.h>
+#include <sharp/sh_smem.h>
+#endif /* CONFIG_BATTERY_SH */
+#endif /* CONFIG_MACH_REN */
 
 /* Interrupt offsets */
 #define INT_RT_STS(base)			(base + 0x10)
@@ -91,6 +96,9 @@
 #define CHGR_USB_USB_OTG_CTL			0x48
 #define CHGR_USB_ENUM_T_STOP			0x4E
 #define CHGR_USB_TRIM				0xF1
+#ifdef CONFIG_BATTERY_SH
+#define CHGR_DC_TRIM				0xF1
+#endif /* CONFIG_BATTERY_SH */
 #define CHGR_CHG_TEMP_THRESH			0x66
 #define CHGR_BAT_IF_PRES_STATUS			0x08
 #define CHGR_STATUS				0x09
@@ -128,6 +136,11 @@
 #define DC_COMP_OVR1				0xE9
 #define CHGR_COMP_OVR1				0xEE
 #define USB_CHGPTH_CTL				0x40
+
+#ifdef CONFIG_BATTERY_SH
+#define BAT_IF_BAT_IF_TEST2		0xE3
+#endif /* CONFIG_BATTERY_SH */
+
 #define REG_OFFSET_PERP_SUBTYPE			0x05
 
 /* SMBB peripheral subtype values */
@@ -155,6 +168,22 @@
 #define SMBCL_MISC_SUBTYPE			0x47
 
 #define QPNP_CHARGER_DEV_NAME	"qcom,qpnp-charger"
+
+#ifdef CONFIG_BATTERY_SH
+
+#ifndef MAX
+#define MAX(a,b)	(((a) > (b)) ? (a) : (b))
+#endif
+#ifndef MIN
+#define MIN(a,b)	(((a) < (b)) ? (a) : (b))
+#endif
+
+#define QPNP_CHG_ENABLE_PARA_CONN
+
+#define QPNP_CHG_IUSB_TRIM_GAIN		2
+#define QPNP_CHG_IUSB_TRIM_OFFSET	3
+
+#endif /* CONFIG_BATTERY_SH */
 
 /* Status bits and masks */
 #define CHGR_BOOT_DONE			BIT(7)
@@ -405,7 +434,30 @@ struct qpnp_chg_chip {
 	unsigned int			ext_ovp_isns_gpio;
 	unsigned int			usb_trim_default;
 	u8				chg_temp_thresh_default;
+
+#ifdef CONFIG_BATTERY_SH
+	bool				sh_control_disable;
+	bool				sh_control_prdflg;
+	int						flash_control_status;
+	bool					flash_control_detect;
+	struct delayed_work		flash_check_work;
+	struct delayed_work		flash_safety_work;
+	struct mutex			flash_control_lock;
+	u8						iusb_trim;
+	u8						idc_trim;
+#endif /* CONFIG_BATTERY_SH */
 };
+
+#ifdef CONFIG_BATTERY_SH
+
+static struct qpnp_chg_chip *the_chip;
+
+#define QPNP_FLASH_CONTROL_OFF			0
+#define QPNP_FLASH_CONTROL_ON			1
+#define QPNP_FLASH_CONTROL_OFF_NO_ICHG	2
+#define QPNP_FLASH_CONTROL_DETECT		3
+
+#endif /* CONFIG_BATTERY_SH */
 
 static void
 qpnp_chg_set_appropriate_battery_current(struct qpnp_chg_chip *chip);
@@ -699,6 +751,14 @@ qpnp_chg_is_boost_en_set(struct qpnp_chg_chip *chip)
 
 	pr_debug("boost en 0x%x\n", boost_en_ctl);
 
+#ifdef CONFIG_BATTERY_SH
+	if (chip->flash_control_status != QPNP_FLASH_CONTROL_OFF)
+	{
+		boost_en_ctl &= ~BOOST_PWR_EN;
+		pr_debug("flash control: status=%d boost_en=0x%02x\n",
+			chip->flash_control_status, boost_en_ctl);
+	}
+#endif /* CONFIG_BATTERY_SH */
 	return (boost_en_ctl & BOOST_PWR_EN) ? 1 : 0;
 }
 
@@ -988,12 +1048,59 @@ qpnp_chg_iusb_trim_set(struct qpnp_chg_chip *chip, int trim)
 	return rc;
 }
 
+#ifdef CONFIG_BATTERY_SH
+static int
+qpnp_chg_idc_trim_get(struct qpnp_chg_chip *chip)
+{
+	int rc = 0;
+	u8 trim_reg;
+
+	rc = qpnp_chg_read(chip, &trim_reg,
+			chip->dc_chgpth_base + CHGR_DC_TRIM, 1);
+	if (rc) {
+		pr_err("failed to read DC_TRIM rc=%d\n", rc);
+		return 0;
+	}
+
+	return trim_reg;
+}
+
+static int
+qpnp_chg_idc_trim_set(struct qpnp_chg_chip *chip, int trim)
+{
+	int rc = 0;
+
+	rc = qpnp_chg_masked_write(chip,
+		chip->dc_chgpth_base + SEC_ACCESS,
+		0xFF,
+		0xA5, 1);
+	if (rc) {
+		pr_err("failed to write SEC_ACCESS rc=%d\n", rc);
+		return rc;
+	}
+
+	rc = qpnp_chg_masked_write(chip,
+		chip->dc_chgpth_base + CHGR_DC_TRIM,
+		0xFF,
+		trim, 1);
+	if (rc) {
+		pr_err("failed to write DC TRIM rc=%d\n", rc);
+		return rc;
+	}
+
+	return rc;
+}
+#endif /* CONFIG_BATTERY_SH */
+
 #define IOVP_USB_WALL_TRSH_MA   150
 static int
 qpnp_chg_iusbmax_set(struct qpnp_chg_chip *chip, int mA)
 {
 	int rc = 0;
 	u8 usb_reg = 0, temp = 8;
+#ifdef CONFIG_BATTERY_SH
+	u8 trim_delta = 0;
+#endif /* CONFIG_BATTERY_SH */
 
 	if (mA < 0 || mA > QPNP_CHG_I_MAX_MAX_MA) {
 		pr_err("bad mA=%d asked to set\n", mA);
@@ -1017,6 +1124,24 @@ qpnp_chg_iusbmax_set(struct qpnp_chg_chip *chip, int mA)
 		mA = (chip->maxinput_usb_ma) <= mA ? chip->maxinput_usb_ma : mA;
 
 	usb_reg = mA / QPNP_CHG_I_MAXSTEP_MA;
+
+#ifdef CONFIG_BATTERY_SH
+	if (chip->parallel_ovp_mode)
+	{
+		trim_delta = QPNP_CHG_IUSB_TRIM_GAIN * usb_reg + QPNP_CHG_IUSB_TRIM_OFFSET;
+
+		if (chip->iusb_trim >= trim_delta) {
+			qpnp_chg_iusb_trim_set(chip, chip->iusb_trim - trim_delta);
+			qpnp_chg_idc_trim_set(chip, chip->idc_trim);
+		} else if (chip->iusb_trim + chip->idc_trim >= trim_delta) {
+			qpnp_chg_iusb_trim_set(chip, 0);
+			qpnp_chg_idc_trim_set(chip, chip->idc_trim - (trim_delta - chip->iusb_trim));
+		} else {
+			qpnp_chg_iusb_trim_set(chip, 0);
+			qpnp_chg_idc_trim_set(chip, 0);
+		}
+	}
+#endif /* CONFIG_BATTERY_SH */
 
 	if (chip->flags & CHG_FLAGS_VCP_WA) {
 		temp = 0xA5;
@@ -1043,6 +1168,69 @@ qpnp_chg_iusbmax_set(struct qpnp_chg_chip *chip, int mA)
 
 	return rc;
 }
+
+#ifdef CONFIG_BATTERY_SH
+#define MISC_RAW_DVDD_RB_SCRATCH	0x16CE
+/* BMS Utility Register */
+#define BMS_STORE_IDC_TRIM			0x40B8
+
+static int qpnp_chg_store_trim(struct qpnp_chg_chip *chip)
+{
+	int rc;
+	u8 reg = 0x00;
+
+	rc = qpnp_chg_read(chip, &reg, MISC_RAW_DVDD_RB_SCRATCH, 1);
+	if (rc < 0)
+	{
+		pr_err("failed to read MISC_RAW_DVDD_RB_SCRATCH rc=%d\n", rc);
+		return rc;
+	}
+	pr_info("dvdd_rb_scratch = 0x%02x\n", reg);
+
+	if (reg == 0x00)
+	{
+		/* store iusb_trim */
+		reg = chip->iusb_trim;
+		rc = qpnp_chg_write(chip, &reg, MISC_RAW_DVDD_RB_SCRATCH, 1);
+		if (rc < 0)
+		{
+			pr_err("failed to write MISC_RAW_DVDD_RB_SCRATCH rc=%d\n", rc);
+			return rc;
+		}
+
+		/* store idc_trim */
+		reg = chip->idc_trim;
+		rc = qpnp_chg_write(chip, &reg, BMS_STORE_IDC_TRIM, 1);
+		if (rc < 0)
+		{
+			pr_err("failed to write BMS_STORE_IDC_TRIM rc=%d\n", rc);
+			return rc;
+		}
+
+		pr_info("store trim: iusb = 0x%02x idc = 0x%02x\n",
+			chip->iusb_trim, chip->idc_trim);
+	}
+	else
+	{
+		/* restore iusb_trim */
+		chip->iusb_trim = reg;
+
+		/* restore idc_trim */
+		rc = qpnp_chg_read(chip, &reg, BMS_STORE_IDC_TRIM, 1);
+		if (rc < 0)
+		{
+			pr_err("failed to read BMS_STORE_IDC_TRIM rc=%d\n", rc);
+			return rc;
+		}
+		chip->idc_trim = reg;
+
+		pr_info("restore trim: iusb = 0x%02x idc = 0x%02x\n",
+			chip->iusb_trim, chip->idc_trim);
+	}
+
+	return 0;
+}
+#endif /* CONFIG_BATTERY_SH */
 
 #define QPNP_CHG_VINMIN_MIN_MV		4000
 #define QPNP_CHG_VINMIN_HIGH_MIN_MV	5600
@@ -1238,9 +1426,12 @@ qpnp_chg_force_run_on_batt(struct qpnp_chg_chip *chip, int disable)
 	/* Don't run on battery for batteryless hardware */
 	if (chip->use_default_batt_values)
 		return 0;
+
+#ifndef CONFIG_BATTERY_SH
 	/* Don't force on battery if battery is not present */
 	if (!qpnp_chg_is_batt_present(chip))
 		return 0;
+#endif /* CONFIG_BATTERY_SH */
 
 	/* This bit forces the charger to run off of the battery rather
 	 * than a connected charger */
@@ -1346,9 +1537,13 @@ qpnp_arb_stop_work(struct work_struct *work)
 	struct qpnp_chg_chip *chip = container_of(dwork,
 				struct qpnp_chg_chip, arb_stop_work);
 
+#ifndef CONFIG_BATTERY_SH
 	if (!chip->chg_done)
 		qpnp_chg_charge_en(chip, !chip->charging_disabled);
 	qpnp_chg_force_run_on_batt(chip, chip->charging_disabled);
+#else  /* CONFIG_BATTERY_SH */
+	qpnp_chg_force_run_on_batt(chip, 0);
+#endif /* CONFIG_BATTERY_SH */
 }
 
 static void
@@ -1388,7 +1583,9 @@ qpnp_chg_vbatdet_lo_irq_handler(int irq, void *_chip)
 	if (!chip->charging_disabled && (chg_sts & FAST_CHG_ON_IRQ)) {
 		schedule_delayed_work(&chip->eoc_work,
 			msecs_to_jiffies(EOC_CHECK_PERIOD_MS));
+#ifndef CONFIG_BATTERY_SH
 		pm_stay_awake(chip->dev);
+#endif /* CONFIG_BATTERY_SH */
 	}
 	qpnp_chg_disable_irq(&chip->chg_vbatdet_lo);
 
@@ -1426,10 +1623,12 @@ qpnp_chg_usb_chg_gone_irq_handler(int irq, void *_chip)
 			pr_debug("EXT OVP IC ISNS disabled due to ARB WA\n");
 			gpio_direction_output(chip->ext_ovp_isns_gpio, 0);
 		}
-
+#ifndef CONFIG_BATTERY_SH
 		qpnp_chg_charge_en(chip, 0);
-
 		qpnp_chg_force_run_on_batt(chip, 1);
+#else  /* CONFIG_BATTERY_SH */
+		qpnp_chg_force_run_on_batt(chip, 1);
+#endif /* CONFIG_BATTERY_SH */
 		schedule_delayed_work(&chip->arb_stop_work,
 			msecs_to_jiffies(ARB_STOP_WORK_MS));
 	}
@@ -1562,6 +1761,7 @@ qpnp_chg_vddmax_and_trim_set(struct qpnp_chg_chip *chip,
 	return 0;
 }
 
+#ifndef CONFIG_BATTERY_SH
 static int
 qpnp_chg_vddmax_get(struct qpnp_chg_chip *chip)
 {
@@ -1576,11 +1776,19 @@ qpnp_chg_vddmax_get(struct qpnp_chg_chip *chip)
 
 	return QPNP_CHG_V_MIN_MV + (int)vddmax * QPNP_CHG_V_STEP_MV;
 }
+#endif /* CONFIG_BATTERY_SH */
 
 /* JEITA compliance logic */
 static void
 qpnp_chg_set_appropriate_vddmax(struct qpnp_chg_chip *chip)
 {
+#ifdef CONFIG_BATTERY_SH
+	if (chip->sh_control_disable)
+	{
+		return;
+	}
+#endif /* CONFIG_BATTERY_SH */
+	
 	if (chip->bat_is_cool)
 		qpnp_chg_vddmax_and_trim_set(chip, chip->cool_bat_mv,
 				chip->delta_vddmax_mv);
@@ -1724,8 +1932,15 @@ qpnp_chg_usb_usbin_valid_irq_handler(int irq, void *_chip)
 		usb_present, host_mode);
 
 	/* In host mode notifications cmoe from USB supply */
+#ifndef CONFIG_BATTERY_SH
 	if (host_mode)
 		return IRQ_HANDLED;
+#else  /* CONFIG_BATTERY_SH */
+	if (host_mode){
+		chip->usb_present = usb_present;
+		return IRQ_HANDLED;
+	}
+#endif /* CONFIG_BATTERY_SH */
 
 	if (chip->usb_present ^ usb_present) {
 		chip->aicl_settled = false;
@@ -1757,7 +1972,11 @@ qpnp_chg_usb_usbin_valid_irq_handler(int irq, void *_chip)
 			if (!qpnp_is_dc_higher_prio(chip))
 				qpnp_chg_idcmax_set(chip, chip->maxinput_dc_ma);
 
+#ifndef CONFIG_BATTERY_SH
 			qpnp_chg_usb_suspend_enable(chip, 0);
+#else  /* CONFIG_BATTERY_SH */
+			qpnp_chg_usb_suspend_enable(chip, 1);
+#endif /* CONFIG_BATTERY_SH */
 			qpnp_chg_iusbmax_set(chip, QPNP_CHG_I_MAX_MIN_100);
 			qpnp_chg_iusb_trim_set(chip, chip->usb_trim_default);
 			chip->prev_usb_max_ma = -EINVAL;
@@ -1923,7 +2142,9 @@ qpnp_chg_bat_if_batt_pres_irq_handler(int irq, void *_chip)
 				return rc;
 			}
 			chip->insertion_ocv_uv = 0;
+#ifndef CONFIG_BATTERY_SH
 			qpnp_chg_charge_en(chip, 0);
+#endif /* CONFIG_BATTERY_SH */
 		}
 		chip->batt_present = batt_present;
 		pr_debug("psy changed batt_psy\n");
@@ -1953,6 +2174,21 @@ qpnp_chg_dc_dcin_valid_irq_handler(int irq, void *_chip)
 
 	dc_present = qpnp_chg_is_dc_chg_plugged_in(chip);
 	pr_debug("dcin-valid triggered: %d\n", dc_present);
+
+#ifdef CONFIG_BATTERY_SH
+	if (chip->dc_present ^ dc_present) {
+		if (dc_present)
+		{
+			qpnp_chg_force_run_on_batt(chip, 1);
+			shchg_api_notify_cradle_connected();
+		}
+		else
+		{
+			qpnp_chg_force_run_on_batt(chip, 0);
+			shchg_api_notify_cradle_disconnected();
+		}
+	}
+#endif /* CONFIG_BATTERY_SH */
 
 	if (chip->dc_present ^ dc_present) {
 		chip->dc_present = dc_present;
@@ -2118,7 +2354,9 @@ qpnp_chg_chgr_chg_fastchg_irq_handler(int irq, void *_chip)
 			if (!chip->charging_disabled) {
 				schedule_delayed_work(&chip->eoc_work,
 					msecs_to_jiffies(EOC_CHECK_PERIOD_MS));
+#ifndef CONFIG_BATTERY_SH
 				pm_stay_awake(chip->dev);
+#endif /* CONFIG_BATTERY_SH */
 			}
 			if (chip->parallel_ovp_mode)
 				switch_parallel_ovp_mode(chip, 1);
@@ -2354,7 +2592,9 @@ static char *pm_batt_supplied_to[] = {
 };
 
 static int charger_monitor;
+#ifndef CONFIG_BATTERY_SH
 module_param(charger_monitor, int, 0644);
+#endif /* CONFIG_BATTERY_SH */
 
 static int ext_ovp_present;
 module_param(ext_ovp_present, int, 0444);
@@ -2903,8 +3143,13 @@ qpnp_chg_bat_if_configure_btc(struct qpnp_chg_chip *chip)
 			mask, btc_cfg, 1);
 }
 
+#ifndef CONFIG_BATTERY_SH
 #define QPNP_CHG_IBATSAFE_MIN_MA		100
 #define QPNP_CHG_IBATSAFE_MAX_MA		3250
+#else  /* CONFIG_BATTERY_SH */
+#define QPNP_CHG_IBATSAFE_MIN_MA		200
+#define QPNP_CHG_IBATSAFE_MAX_MA		3000
+#endif /* CONFIG_BATTERY_SH */
 #define QPNP_CHG_I_STEP_MA		50
 #define QPNP_CHG_I_MIN_MA		100
 #define QPNP_CHG_I_MASK			0x3F
@@ -2947,8 +3192,13 @@ qpnp_chg_ibatterm_set(struct qpnp_chg_chip *chip, int term_current)
 			QPNP_CHG_ITERM_MASK, temp, 1);
 }
 
+#ifndef CONFIG_BATTERY_SH
 #define QPNP_CHG_IBATMAX_MIN	50
 #define QPNP_CHG_IBATMAX_MAX	3250
+#else  /* CONFIG_BATTERY_SH */
+#define QPNP_CHG_IBATMAX_MIN	200
+#define QPNP_CHG_IBATMAX_MAX	3000
+#endif /* CONFIG_BATTERY_SH */
 static int
 qpnp_chg_ibatmax_set(struct qpnp_chg_chip *chip, int chg_current)
 {
@@ -3368,6 +3618,13 @@ qpnp_chg_regulator_otg_enable(struct regulator_dev *rdev)
 {
 	struct qpnp_chg_chip *chip = rdev_get_drvdata(rdev);
 
+#ifdef CONFIG_BATTERY_SH
+#if defined(CONFIG_LEDS_QPNP)
+	/* Boost Bypass set to disable */
+	qpnp_regulator_boost_bypass_enable( 0 );
+#endif /* CONFIG_LEDS_QPNP */
+#endif /* CONFIG_BATTERY_SH */
+
 	return switch_usb_to_host_mode(chip);
 }
 
@@ -3375,6 +3632,21 @@ static int
 qpnp_chg_regulator_otg_disable(struct regulator_dev *rdev)
 {
 	struct qpnp_chg_chip *chip = rdev_get_drvdata(rdev);
+
+#ifdef CONFIG_BATTERY_SH
+/*| ######## ZANTEI ######## */
+#if 0
+#if defined(CONFIG_LEDS_QPNP)
+	if ( qpnp_torch_is_enable() ) {
+	  /* Boost Bypass set to enable */
+	  qpnp_regulator_boost_bypass_enable( 1 );
+	} else {
+	  /* Boost Bypass set to disable */
+	  qpnp_regulator_boost_bypass_enable( 0 );
+	}
+#endif /* CONFIG_LEDS_QPNP */
+#endif
+#endif /* CONFIG_BATTERY_SH */
 
 	return switch_usb_to_charge_mode(chip);
 }
@@ -3451,6 +3723,15 @@ qpnp_chg_regulator_boost_disable(struct regulator_dev *rdev)
 	struct qpnp_chg_chip *chip = rdev_get_drvdata(rdev);
 	int rc;
 	u8 vbat_sts;
+
+#ifdef CONFIG_BATTERY_SH
+	if (chip->flash_control_status != QPNP_FLASH_CONTROL_OFF)
+	{
+		rc = 0;
+		pr_debug("flash control: status=%d\n", chip->flash_control_status);
+		goto skip;
+	}
+#endif /* CONFIG_BATTERY_SH */
 
 	rc = qpnp_chg_masked_write(chip,
 		chip->boost_base + BOOST_ENABLE_CONTROL,
@@ -3529,7 +3810,13 @@ qpnp_chg_regulator_boost_disable(struct regulator_dev *rdev)
 			}
 		}
 		usleep(1000);
-
+#ifdef CONFIG_BATTERY_SH
+		if (shchg_api_is_charge_ignore())
+		{
+			pr_debug("charge ignore: skip to write USB_SUSP\n");
+			goto skip;
+		}
+#endif /* CONFIG_BATTERY_SH */
 		qpnp_chg_usb_suspend_enable(chip, 0);
 	}
 
@@ -3552,6 +3839,9 @@ qpnp_chg_regulator_boost_disable(struct regulator_dev *rdev)
 		gpio_direction_output(chip->ext_ovp_isns_gpio, 1);
 	}
 
+#ifdef CONFIG_BATTERY_SH
+skip:
+#endif /* CONFIG_BATTERY_SH */
 	return rc;
 }
 
@@ -3712,9 +4002,15 @@ static struct regulator_ops qpnp_chg_batfet_vreg_ops = {
 	.is_enabled		= qpnp_chg_regulator_batfet_is_enabled,
 };
 
+#ifdef CONFIG_BATTERY_SH
+#define MIN_DELTA_MV_TO_INCREASE_VDD_MAX	9
+#define MAX_DELTA_VDD_MAX_MV			80
+#define VDD_MAX_CENTER_OFFSET			0
+#else
 #define MIN_DELTA_MV_TO_INCREASE_VDD_MAX	8
 #define MAX_DELTA_VDD_MAX_MV			80
 #define VDD_MAX_CENTER_OFFSET			4
+#endif /* CONFIG_BATTERY_SH */
 static void
 qpnp_chg_adjust_vddmax(struct qpnp_chg_chip *chip, int vbat_mv)
 {
@@ -3753,24 +4049,38 @@ qpnp_eoc_work(struct work_struct *work)
 	bool vbat_lower_than_vbatdet;
 
 	pm_stay_awake(chip->dev);
+#ifndef CONFIG_BATTERY_SH
 	qpnp_chg_charge_en(chip, !chip->charging_disabled);
+#endif /* CONFIG_BATTERY_SH */
 
 	rc = qpnp_chg_read(chip, &batt_sts, INT_RT_STS(chip->bat_if_base), 1);
 	if (rc) {
 		pr_err("failed to read batt_if rc=%d\n", rc);
+#ifdef CONFIG_BATTERY_SH
+		goto err;
+#else
 		return;
+#endif /* CONFIG_BATTERY_SH */
 	}
 
 	rc = qpnp_chg_read(chip, &buck_sts, INT_RT_STS(chip->buck_base), 1);
 	if (rc) {
 		pr_err("failed to read buck rc=%d\n", rc);
+#ifdef CONFIG_BATTERY_SH
+		goto err;
+#else
 		return;
+#endif /* CONFIG_BATTERY_SH */
 	}
 
 	rc = qpnp_chg_read(chip, &chg_sts, INT_RT_STS(chip->chgr_base), 1);
 	if (rc) {
 		pr_err("failed to read chg_sts rc=%d\n", rc);
+#ifdef CONFIG_BATTERY_SH
+		goto err;
+#else
 		return;
+#endif /* CONFIG_BATTERY_SH */
 	}
 
 	pr_debug("chgr: 0x%x, bat_if: 0x%x, buck: 0x%x\n",
@@ -3782,8 +4092,12 @@ qpnp_eoc_work(struct work_struct *work)
 		goto stop_eoc;
 	}
 
+#ifdef CONFIG_BATTERY_SH
+	if (batt_sts & BAT_FET_ON_IRQ) {
+#else
 	if ((batt_sts & BAT_FET_ON_IRQ) && (chg_sts & FAST_CHG_ON_IRQ
 					|| chg_sts & TRKL_CHG_ON_IRQ)) {
+#endif /* CONFIG_BATTERY_SH */
 		ibat_ma = get_prop_current_now(chip) / 1000;
 		vbat_mv = get_prop_battery_voltage_now(chip) / 1000;
 
@@ -3814,6 +4128,7 @@ qpnp_eoc_work(struct work_struct *work)
 		if (buck_sts & VDD_LOOP_IRQ)
 			qpnp_chg_adjust_vddmax(chip, vbat_mv);
 
+#ifndef CONFIG_BATTERY_SH
 		if (!(buck_sts & VDD_LOOP_IRQ)) {
 			pr_debug("Not in CV\n");
 			count = 0;
@@ -3848,6 +4163,7 @@ qpnp_eoc_work(struct work_struct *work)
 				pr_debug("EOC count = %d\n", count);
 			}
 		}
+#endif /* CONFIG_BATTERY_SH */
 	} else {
 		pr_debug("not charging\n");
 		goto stop_eoc;
@@ -3856,12 +4172,24 @@ qpnp_eoc_work(struct work_struct *work)
 check_again_later:
 	schedule_delayed_work(&chip->eoc_work,
 		msecs_to_jiffies(EOC_CHECK_PERIOD_MS));
+#ifdef CONFIG_BATTERY_SH
+	pm_relax(chip->dev);
+#endif /* CONFIG_BATTERY_SH */
 	return;
 
 stop_eoc:
 	vbat_low_count = 0;
 	count = 0;
+#ifdef CONFIG_BATTERY_SH
 	pm_relax(chip->dev);
+	return;
+#endif /* CONFIG_BATTERY_SH */
+
+#ifdef CONFIG_BATTERY_SH
+err:
+	pm_relax(chip->dev);
+	return;
+#endif /* CONFIG_BATTERY_SH */
 }
 
 static void
@@ -3885,7 +4213,9 @@ qpnp_chg_insertion_ocv_work(struct work_struct *work)
 
 	pr_debug("batfet sts = %02x, charge_en = %02x ocv = %d\n",
 			bat_if_sts, charge_en, chip->insertion_ocv_uv);
+#ifndef CONFIG_BATTERY_SH
 	qpnp_chg_charge_en(chip, !chip->charging_disabled);
+#endif /* CONFIG_BATTERY_SH */
 	pr_debug("psy changed batt_psy\n");
 	power_supply_changed(&chip->batt_psy);
 }
@@ -3895,6 +4225,13 @@ qpnp_chg_soc_check_work(struct work_struct *work)
 {
 	struct qpnp_chg_chip *chip = container_of(work,
 				struct qpnp_chg_chip, soc_check_work);
+
+#ifdef CONFIG_BATTERY_SH
+	if (chip->sh_control_disable)
+	{
+		return;
+	}
+#endif /* CONFIG_BATTERY_SH */
 
 	get_prop_capacity(chip);
 }
@@ -3906,6 +4243,13 @@ qpnp_chg_adc_notification(enum qpnp_tm_state state, void *ctx)
 	struct qpnp_chg_chip *chip = ctx;
 	bool bat_warm = 0, bat_cool = 0;
 	int temp;
+
+#ifdef CONFIG_BATTERY_SH
+	if (chip->sh_control_disable)
+	{
+		return;
+	}
+#endif /* CONFIG_BATTERY_SH */
 
 	if (state >= ADC_TM_STATE_NUM) {
 		pr_err("invalid notification %d\n", state);
@@ -4667,6 +5011,732 @@ qpnp_chg_request_irqs(struct qpnp_chg_chip *chip)
 	return rc;
 }
 
+#ifdef CONFIG_BATTERY_SH
+#define GISPRODUCT_F_MASK	0x00000080
+static void qpnp_chg_setup_control_flags(struct qpnp_chg_chip *chip)
+{
+	sharp_smem_common_type *smem;
+
+	smem = sh_smem_get_common_address();
+	if (smem)
+	{
+		if (smem->shdiag_FlagData & GISPRODUCT_F_MASK)
+		{
+			chip->sh_control_prdflg = true;
+		}
+	}
+}
+
+int qpnp_chg_charger_transistor_switch(int enable)
+{
+	if (!the_chip)
+	{
+		pr_err("qpnp charger is not initialized\n");
+		return -EINVAL;
+	}
+
+	return qpnp_chg_usb_suspend_enable(the_chip, !enable);
+}
+EXPORT_SYMBOL(qpnp_chg_charger_transistor_switch);
+
+#define CONTROL_FORCE_BAT_FET	0
+#define CONTROL_CHARGE_ENABLE	1
+int qpnp_chg_battery_transistor_switch(int enable)
+{
+	const int control_list[][2] = {
+		{ 0x80,  0 },	/* force off */
+		{ 0xC0,  1 },	/* force on  */
+		{ 0x00,  0 },	/* off       */
+		{ 0xC0,  1 },	/* on        */
+	};
+	int rc;
+	u8 val;
+	int charge_en;
+	static int prev_charge_en = -1;
+
+	if (!the_chip)
+	{
+		pr_err("qpnp charger is not initialized\n");
+		return -EINVAL;
+	}
+
+	if ((enable < 0) || (enable >= ARRAY_SIZE(control_list)))
+	{
+		pr_debug("invalid parameter: enable = %d\n", enable);
+		return -EINVAL;
+	}
+	pr_debug("batfet:0x%02x chg_en:%d\n",
+		control_list[enable][CONTROL_FORCE_BAT_FET],
+		control_list[enable][CONTROL_CHARGE_ENABLE]);
+
+	val = 0xA5;
+	rc = qpnp_chg_write(the_chip, &val, the_chip->bat_if_base + SEC_ACCESS, 1);
+	if (rc)
+	{
+		pr_err("SEC_ACCESS write error = %d\n", rc);
+		return rc;
+	}
+
+	/* FORCE_BAT_FET */
+	val = control_list[enable][CONTROL_FORCE_BAT_FET];
+
+	rc = qpnp_chg_write(the_chip, &val, the_chip->bat_if_base + BAT_IF_BAT_IF_TEST2, 1);
+	if (rc)
+	{
+		pr_err("BAT_IF_BAT_IF_TEST2 write error = %d\n", rc);
+		return rc;
+	}
+
+	/* CHGR_CHG_EN */
+	charge_en = control_list[enable][CONTROL_CHARGE_ENABLE];
+	if (charge_en != -1)
+	{
+		if (prev_charge_en == 0 && charge_en == 1)
+		{
+			the_chip->delta_vddmax_mv = 0;
+		}
+		prev_charge_en = charge_en;
+
+		rc = qpnp_chg_charge_en(the_chip, charge_en);
+		if (rc)
+		{
+			pr_err("qpnp_chg_charge_en error = %d\n", rc);
+			return rc;
+		}
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(qpnp_chg_battery_transistor_switch);
+
+int qpnp_chg_charger_vinmin_set(int voltage)
+{
+	if (!the_chip)
+	{
+		pr_err("qpnp charger is not initialized\n");
+		return -EINVAL;
+	}
+
+	return qpnp_chg_vinmin_set(the_chip, voltage);
+}
+EXPORT_SYMBOL_GPL(qpnp_chg_charger_vinmin_set);
+
+int qpnp_chg_charger_vinmin_get(int* voltage)
+{
+	if (!the_chip)
+	{
+		pr_err("qpnp charger is not initialized\n");
+		return -EINVAL;
+	}
+
+	*voltage = qpnp_chg_vinmin_get(the_chip);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(qpnp_chg_charger_vinmin_get);
+
+int qpnp_chg_charger_ibatmax_set(int chg_current)
+{
+	if (!the_chip)
+	{
+		pr_err("qpnp charger is not initialized\n");
+		return -EINVAL;
+	}
+
+	return qpnp_chg_ibatmax_set(the_chip, chg_current);
+}
+EXPORT_SYMBOL_GPL(qpnp_chg_charger_ibatmax_set);
+
+int qpnp_chg_charger_ibatmax_get(int *chg_current)
+{
+	if (!the_chip)
+	{
+		pr_err("qpnp charger is not initialized\n");
+		return -EINVAL;
+	}
+
+	return qpnp_chg_ibatmax_get(the_chip, chg_current);
+}
+
+int qpnp_chg_charger_vddmax_set(int voltage)
+{
+	if (!the_chip)
+	{
+		pr_err("qpnp charger is not initialized\n");
+		return -EINVAL;
+	}
+
+	the_chip->max_voltage_mv = voltage;
+	return qpnp_chg_vddmax_and_trim_set(the_chip, the_chip->max_voltage_mv, the_chip->delta_vddmax_mv);
+}
+EXPORT_SYMBOL_GPL(qpnp_chg_charger_vddmax_set);
+
+int qpnp_chg_charger_vddmax_get(int* voltage)
+{
+	int rc = 0;
+	u8 read_voltage;
+
+	if (!the_chip)
+	{
+		pr_err("qpnp charger is not initialized\n");
+		return -EINVAL;
+	}
+
+	rc = qpnp_chg_read(the_chip, &read_voltage, the_chip->chgr_base + CHGR_VDD_MAX, 1);
+	if(rc)
+	{
+		pr_err("vin_min read err=%d ",rc);
+		return rc;
+	}
+
+	*voltage = QPNP_CHG_V_MIN_MV + (read_voltage * QPNP_CHG_V_STEP_MV);
+
+	return rc;
+}
+EXPORT_SYMBOL_GPL(qpnp_chg_charger_vddmax_get);
+
+static int qpnp_chg_calc_chg_current(u8 reg)
+{
+	int mA;
+
+	if (reg == 0x00)
+	{
+		mA = QPNP_CHG_I_MAX_MIN_100;
+	}
+	else
+	if (reg == 0x01)
+	{
+		mA = QPNP_CHG_I_MAX_MIN_150;
+	}
+	else
+	{
+		mA = reg * QPNP_CHG_I_MAXSTEP_MA;
+		mA = MAX(MIN(mA, QPNP_CHG_I_MAX_MAX_MA), QPNP_CHG_I_MAX_MIN_MA);
+	}
+
+	return mA;
+}
+
+int qpnp_chg_charger_iusbmax_set(int chg_current)
+{
+	if (!the_chip)
+	{
+		pr_err("qpnp charger is not initialized\n");
+		return -EINVAL;
+	}
+
+	return qpnp_chg_iusbmax_set(the_chip, chg_current);
+}
+EXPORT_SYMBOL_GPL(qpnp_chg_charger_iusbmax_set);
+
+#define IUSB_MAX_MASK	0x1F
+int qpnp_chg_charger_iusbmax_get(int* mA)
+{
+	int rc = 0;
+	u8 read_mA;
+
+	if (!the_chip)
+	{
+		pr_err("qpnp charger is not initialized\n");
+		return -EINVAL;
+	}
+
+	rc = qpnp_chg_read(the_chip, &read_mA, the_chip->usb_chgpth_base + CHGR_I_MAX_REG, 1);
+	if(rc)
+	{
+		pr_err("idcmax read err=%d ",rc);
+		return rc;
+	}
+
+	read_mA = read_mA & IUSB_MAX_MASK;
+	*mA = qpnp_chg_calc_chg_current(read_mA);
+
+	return rc;
+}
+EXPORT_SYMBOL_GPL(qpnp_chg_charger_iusbmax_get);
+
+int qpnp_chg_charger_is_otg_en_set(void)
+{
+	if (!the_chip)
+	{
+		pr_err("qpnp charger is not initialized\n");
+		return -EINVAL;
+	}
+
+	return qpnp_chg_is_otg_en_set(the_chip);
+}
+EXPORT_SYMBOL_GPL(qpnp_chg_charger_is_otg_en_set);
+
+int qpnp_chg_charger_switch_usb_to_host_mode(void)
+{
+	if (!the_chip)
+	{
+		pr_err("qpnp charger is not initialized\n");
+		return -EINVAL;
+	}
+
+	return switch_usb_to_host_mode(the_chip);
+}
+EXPORT_SYMBOL_GPL(qpnp_chg_charger_switch_usb_to_host_mode);
+
+int qpnp_chg_charger_switch_usb_to_charge_mode(void)
+{
+	if (!the_chip)
+	{
+		pr_err("qpnp charger is not initialized\n");
+		return -EINVAL;
+	}
+
+	return switch_usb_to_charge_mode(the_chip);
+}
+EXPORT_SYMBOL_GPL(qpnp_chg_charger_switch_usb_to_charge_mode);
+
+int qpnp_chg_charger_force_run_on_batt(int disable)
+{
+	if (!the_chip)
+	{
+		pr_err("qpnp charger is not initialized\n");
+		return -EINVAL;
+	}
+
+	return qpnp_chg_force_run_on_batt(the_chip, disable);
+}
+EXPORT_SYMBOL(qpnp_chg_charger_force_run_on_batt);
+
+int qpnp_chg_charger_idcmax_set(int mA)
+{
+	if (!the_chip)
+	{
+		pr_err("qpnp charger is not initialized\n");
+		return -EINVAL;
+	}
+
+	return qpnp_chg_idcmax_set(the_chip, mA);
+}
+EXPORT_SYMBOL(qpnp_chg_charger_idcmax_set);
+
+#define IDC_MAX_MASK	0x1F
+int qpnp_chg_charger_idcmax_get(int* mA)
+{
+	int rc = 0;
+	u8 read_mA;
+
+	if (!the_chip)
+	{
+		pr_err("qpnp charger is not initialized\n");
+		return -EINVAL;
+	}
+
+	rc = qpnp_chg_read(the_chip, &read_mA, the_chip->dc_chgpth_base + CHGR_I_MAX_REG, 1);
+	if(rc)
+	{
+		pr_err("idcmax read err=%d ",rc);
+		return rc;
+	}
+
+	read_mA = read_mA & IDC_MAX_MASK;
+	*mA = qpnp_chg_calc_chg_current(read_mA);
+
+	return rc;
+}
+EXPORT_SYMBOL_GPL(qpnp_chg_charger_idcmax_get);
+
+#ifndef QPNP_CHG_TCHG_EN_MASK
+#define QPNP_CHG_TCHG_EN_MASK	0x80
+#endif
+#define QPNP_CHG_TCHG_EN		BIT(7)
+static int qpnp_chg_tchg_enable(int enable)
+{
+	u8 reg_en;
+
+	if (!the_chip)
+	{
+		pr_err("qpnp charger is not initialized\n");
+		return -EINVAL;
+	}
+
+	reg_en = (enable) ? QPNP_CHG_TCHG_EN : 0;
+	return qpnp_chg_masked_write(the_chip, the_chip->chgr_base + CHGR_TCHG_MAX_EN, QPNP_CHG_TCHG_EN_MASK, reg_en, 1);
+}
+
+int qpnp_chg_batfet_status(bool* batfet_closed)
+{
+	int rc = 0;
+
+	if (!the_chip)
+	{
+		pr_err("qpnp charger is not initialized\n");
+		return -EINVAL;
+	}
+
+	rc = qpnp_chg_is_batfet_closed(the_chip);
+	if (rc < 0)
+	{
+		pr_err("batfet status read error = %d\n", rc);
+		return rc;
+	}
+
+	*batfet_closed = (rc) ? true : false;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(qpnp_chg_batfet_status);
+
+int qpnp_chg_get_iusb_trim(void)
+{
+	if (!the_chip)
+	{
+		pr_err("qpnp charger is not initialized\n");
+		return -EINVAL;
+	}
+
+	return qpnp_chg_iusb_trim_get(the_chip);
+}
+EXPORT_SYMBOL_GPL(qpnp_chg_get_iusb_trim);
+
+int qpnp_chg_get_idc_trim(void)
+{
+	if (!the_chip)
+	{
+		pr_err("qpnp charger is not initialized\n");
+		return -EINVAL;
+	}
+
+	return qpnp_chg_idc_trim_get(the_chip);
+}
+EXPORT_SYMBOL_GPL(qpnp_chg_get_idc_trim);
+
+#define QPNP_FLASH_CHECK_WORK_MSEC	1500
+#define QPNP_FLASH_EN_DELAY_MSEC	20
+#define QPNP_FLASH_DIS_DELAY_MSEC	200
+#define QPNP_FLASH_SAFETY_WORK_MSEC	10000
+
+static int qpnp_flash_check_msec = QPNP_FLASH_CHECK_WORK_MSEC;
+module_param_named(flash_check_msec, qpnp_flash_check_msec, int, 0600);
+static int qpnp_flash_check_ichg = 0;
+module_param_named(flash_check_ichg, qpnp_flash_check_ichg, int, 0600);
+static int qpnp_flash_check_susp = -1;
+module_param_named(flash_check_susp, qpnp_flash_check_susp, int, 0600);
+static int qpnp_flash_en_delay_msec = QPNP_FLASH_EN_DELAY_MSEC;
+module_param_named(flash_en_delay_msec, qpnp_flash_en_delay_msec, int, 0600);
+static int qpnp_flash_dis_delay_msec = QPNP_FLASH_DIS_DELAY_MSEC;
+module_param_named(flash_dis_delay_msec, qpnp_flash_dis_delay_msec, int, 0600);
+static int qpnp_flash_safety_msec = QPNP_FLASH_SAFETY_WORK_MSEC;
+module_param_named(flash_safety_msec, qpnp_flash_safety_msec, int, 0600);
+
+static int __qpnp_flash_control_enable(bool enable, bool safefy);
+
+static void qpnp_flash_status_change(struct qpnp_chg_chip *chip, int status)
+{
+	if (qpnp_flash_check_ichg)
+	{
+		struct qpnp_vadc_result result;
+		int rc;
+		int ichg = -1;
+
+		rc = qpnp_vadc_read(chip->vadc_dev, P_MUX2_1_3, &result);
+		if (!rc)
+		{
+			/* voltage(100mV offset) -> current: [I]=[V-100]x2 */
+			ichg = ((int)result.physical - 100 * 1000) / 500;
+		}
+
+		pr_debug("vadc = %lld ichg = %d\n", result.physical, ichg);
+	}
+
+	if (status == QPNP_FLASH_CONTROL_ON)
+	{
+		chip->flash_control_detect = true;
+	}
+	pr_debug("status = %d -> %d\n", chip->flash_control_status, status);
+	chip->flash_control_status = status;
+}
+
+static void qpnp_flash_check_work(struct work_struct *work)
+{
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct qpnp_chg_chip *chip = container_of(dwork,
+				struct qpnp_chg_chip, flash_check_work);
+
+	qpnp_flash_status_change(chip, QPNP_FLASH_CONTROL_OFF);
+}
+
+static void qpnp_flash_safety_work(struct work_struct *work)
+{
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct qpnp_chg_chip *chip = container_of(dwork,
+				struct qpnp_chg_chip, flash_safety_work);
+
+	pr_err("status = %d flash control safety disable\n", chip->flash_control_status);
+	__qpnp_flash_control_enable(false, true);
+}
+
+static int __qpnp_flash_control_enable(bool enable, bool safety)
+{
+	int usb_susp_en;
+	u8 reg;
+	int rc = 0;
+
+	if (!the_chip)
+	{
+		pr_err("qpnp charger is not initialized\n");
+		return -EINVAL;
+	}
+
+	mutex_lock(&the_chip->flash_control_lock);
+
+	if (!safety)
+	{
+		cancel_delayed_work_sync(&the_chip->flash_safety_work);
+	}
+
+	if (enable)
+	{
+		rc = qpnp_chg_read(the_chip, &reg,
+			the_chip->usb_chgpth_base + CHGR_USB_USB_SUSP, 1);
+		if (rc)
+		{
+			pr_err("usb_susp read failed addr = 0x%04x, rc = %d\n",
+				the_chip->usb_chgpth_base + CHGR_USB_USB_SUSP, rc);
+			goto unlock;
+		}
+
+		usb_susp_en = (reg & USB_SUSPEND_BIT) ? 1 : 0;
+		pr_debug("usb_susp read 0x%02x enable = %d\n", reg, usb_susp_en);
+		qpnp_flash_check_susp = usb_susp_en;
+
+		rc = qpnp_chg_usb_suspend_enable(the_chip, 1);
+		if (rc)
+		{
+			goto unlock;
+		}
+
+		cancel_delayed_work_sync(&the_chip->flash_check_work);
+		qpnp_flash_status_change(the_chip, QPNP_FLASH_CONTROL_ON);
+
+		schedule_delayed_work(&the_chip->flash_safety_work,
+			msecs_to_jiffies(qpnp_flash_safety_msec));
+
+		mdelay(qpnp_flash_en_delay_msec);
+
+		rc = qpnp_chg_iusbmax_set(the_chip, 200);
+		if (rc)
+		{
+			goto unlock;
+		}
+
+		if ((qpnp_chg_is_usb_chg_plugged_in(the_chip)) &&
+			(the_chip->flags & BOOST_FLASH_WA))
+		{
+			rc = qpnp_chg_masked_write(the_chip,
+				the_chip->usb_chgpth_base + SEC_ACCESS,
+				0xFF,
+				0xA5, 1);
+			if (rc)
+			{
+				pr_err("failed to write SEC_ACCESS rc=%d\n", rc);
+				goto unlock;
+			}
+
+			rc = qpnp_chg_masked_write(the_chip,
+				the_chip->usb_chgpth_base + COMP_OVR1,
+				0xFF,
+				0x2F, 1);
+			if (rc)
+			{
+				pr_err("failed to write COMP_OVR1 rc=%d\n", rc);
+				goto unlock;
+			}
+		}
+
+		rc = qpnp_chg_masked_write(the_chip,
+			the_chip->boost_base + BOOST_ENABLE_CONTROL,
+			BOOST_PWR_EN,
+			BOOST_PWR_EN, 1);
+		if (rc)
+		{
+			pr_err("boost enable control write failed addr = 0x%04x, rc = %d\n",
+				the_chip->boost_base + BOOST_ENABLE_CONTROL, rc);
+			goto unlock;
+		}
+	}
+	else
+	{
+		if (the_chip->flash_control_status != QPNP_FLASH_CONTROL_ON)
+		{
+			pr_debug("disable skip status = %d\n", the_chip->flash_control_status);
+			goto unlock;
+		}
+
+		rc = qpnp_chg_masked_write(the_chip,
+			the_chip->boost_base + BOOST_ENABLE_CONTROL,
+			BOOST_PWR_EN,
+			0, 1);
+		if (rc)
+		{
+			pr_err("boost enable control write failed addr = 0x%04x, rc = %d\n",
+				the_chip->boost_base + BOOST_ENABLE_CONTROL, rc);
+			if (!safety)
+			{
+				goto unlock;
+			}
+		}
+
+		mdelay(qpnp_flash_dis_delay_msec);
+
+		if ((qpnp_chg_is_usb_chg_plugged_in(the_chip)) &&
+			(the_chip->flags & BOOST_FLASH_WA))
+		{
+			rc = qpnp_chg_masked_write(the_chip,
+				the_chip->usb_chgpth_base + SEC_ACCESS,
+				0xFF,
+				0xA5, 1);
+			if (rc)
+			{
+				pr_err("failed to write SEC_ACCESS rc=%d\n", rc);
+				if (!safety)
+				{
+					goto unlock;
+				}
+			}
+
+			rc = qpnp_chg_masked_write(the_chip,
+				the_chip->usb_chgpth_base + COMP_OVR1,
+				0xFF,
+				0x00, 1);
+			if (rc)
+			{
+				pr_err("failed to write COMP_OVR1 rc=%d\n", rc);
+				if (!safety)
+				{
+					goto unlock;
+				}
+			}
+
+			usleep(1000);
+		}
+
+		usb_susp_en = qpnp_flash_check_susp;
+		if (shchg_api_is_charge_ignore())
+		{
+			pr_debug("charge ignore: usb_susp_en = %d\n", usb_susp_en);
+			usb_susp_en = 1;
+		}
+		pr_debug("usb_susp write enable = %d\n", usb_susp_en);
+
+		rc = qpnp_chg_usb_suspend_enable(the_chip, usb_susp_en);
+		if (rc)
+		{
+			if (!safety)
+			{
+				goto unlock;
+			}
+		}
+
+		qpnp_flash_status_change(the_chip, QPNP_FLASH_CONTROL_OFF_NO_ICHG);
+		schedule_delayed_work(&the_chip->flash_check_work,
+			msecs_to_jiffies(qpnp_flash_check_msec));
+	}
+
+unlock:
+	mutex_unlock(&the_chip->flash_control_lock);
+
+	return rc;
+}
+
+int qpnp_flash_control_enable(bool enable)
+{
+	bool safety = false;
+	return __qpnp_flash_control_enable(enable, safety);
+}
+EXPORT_SYMBOL_GPL(qpnp_flash_control_enable);
+
+int qpnp_chg_flash_is_enable(void)
+{
+	int status = 0;
+
+	if (the_chip)
+	{
+		if (the_chip->flash_control_status)
+		{
+			status = the_chip->flash_control_status;
+		}
+		else
+		if (the_chip->flash_control_detect)
+		{
+			status = QPNP_FLASH_CONTROL_DETECT;
+		}
+		the_chip->flash_control_detect = false;
+	}
+
+	pr_debug("status = %d\n", status);
+
+	return status;
+}
+EXPORT_SYMBOL_GPL(qpnp_chg_flash_is_enable);
+
+static int debug_qpnp_flash_usb_get(void *data, u64 *val)
+{
+	int rc;
+	u8 reg;
+
+	if (!the_chip)
+	{
+		pr_err("qpnp chg is not initialized\n");
+		return -EINVAL;
+	}
+
+	rc = qpnp_chg_read(the_chip, &reg,
+		the_chip->usb_chgpth_base + CHGR_USB_USB_OTG_CTL, 1);
+	if (rc)
+	{
+		pr_err("usb otg ctrl read failed addr = 0x%04x, rc = %d\n",
+			the_chip->usb_chgpth_base + CHGR_USB_USB_OTG_CTL, rc);
+		return rc;
+	}
+
+	*val = reg;
+
+	return 0;
+}
+
+static int debug_qpnp_flash_boost_get(void *data, u64 *val)
+{
+	int rc;
+	u8 reg;
+
+	if (!the_chip)
+	{
+		pr_err("qpnp chg is not initialized\n");
+		return -EINVAL;
+	}
+
+	rc = qpnp_chg_read(the_chip, &reg,
+		the_chip->boost_base + BOOST_ENABLE_CONTROL, 1);
+	if (rc)
+	{
+		pr_err("boost enable control read failed addr = 0x%04x, rc = %d\n",
+			the_chip->boost_base + BOOST_ENABLE_CONTROL, rc);
+		return rc;
+	}
+
+	*val = reg;
+
+	return 0;
+}
+
+static int debug_flash_en_set(void *data, u64 val)
+{
+	bool enable = (val) ? true : false;
+
+	return qpnp_flash_control_enable(enable);
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(debugfs_flash_usb_fops, debug_qpnp_flash_usb_get, NULL, "0x%02llx\n");
+DEFINE_SIMPLE_ATTRIBUTE(debugfs_flash_boost_fops, debug_qpnp_flash_boost_get, NULL, "0x%02llx\n");
+DEFINE_SIMPLE_ATTRIBUTE(debugfs_flash_en_fops, NULL, debug_flash_en_set, "%llu\n");
+#endif /* CONFIG_BATTERY_SH */
+
 static int
 qpnp_chg_load_battery_data(struct qpnp_chg_chip *chip)
 {
@@ -4707,6 +5777,24 @@ qpnp_chg_load_battery_data(struct qpnp_chg_chip *chip)
 	return 0;
 }
 
+#ifdef CONFIG_BATTERY_SH
+#define QPNP_CHG_SMEM_ENABLE_IBAT_SAFE	55
+static void read_smem(int* use_smem_value, int* ibat_safe)
+{
+	unsigned char* ibat_safe_array;
+
+	sharp_smem_common_type *smem = NULL;
+	smem = sh_smem_get_common_address();
+	ibat_safe_array = smem->shpwr_misc_param;
+
+	*ibat_safe = ibat_safe_array[0] << 24 | 
+				 ibat_safe_array[1] << 16 | 
+				 ibat_safe_array[2] << 8 | 
+				 ibat_safe_array[3] << 0;
+	*use_smem_value = ibat_safe_array[4];
+}
+#endif /* CONFIG_BATTERY_SH */
+
 #define WDOG_EN_BIT	BIT(7)
 static int
 qpnp_chg_hwinit(struct qpnp_chg_chip *chip, u8 subtype,
@@ -4716,6 +5804,13 @@ qpnp_chg_hwinit(struct qpnp_chg_chip *chip, u8 subtype,
 	u8 reg = 0;
 	struct regulator_init_data *init_data;
 	struct regulator_desc *rdesc;
+
+#ifdef CONFIG_BATTERY_SH
+	int use_smem_value = 0;
+	int modified_ibat_safe = 0;
+
+	read_smem(&use_smem_value, &modified_ibat_safe);
+#endif /* CONFIG_BATTERY_SH */
 
 	switch (subtype) {
 	case SMBB_CHGR_SUBTYPE:
@@ -4751,11 +5846,34 @@ qpnp_chg_hwinit(struct qpnp_chg_chip *chip, u8 subtype,
 				return rc;
 			}
 		}
+#ifndef CONFIG_BATTERY_SH
 		rc = qpnp_chg_ibatsafe_set(chip, chip->safe_current);
 		if (rc) {
 			pr_debug("failed setting ibat_Safe rc=%d\n", rc);
 			return rc;
 		}
+#else  /* CONFIG_BATTERY_SH */
+		if(use_smem_value == QPNP_CHG_SMEM_ENABLE_IBAT_SAFE)
+		{
+			printk("set ibat_safe value = %d \n", modified_ibat_safe);
+			rc = qpnp_chg_ibatsafe_set(chip, modified_ibat_safe);
+			if (rc) {
+				rc = qpnp_chg_ibatsafe_set(chip, chip->safe_current);
+				if (rc) {
+					pr_debug("failed setting ibat_Safe rc=%d\n", rc);
+					return rc;
+				}
+			}
+		}
+		else
+		{
+			rc = qpnp_chg_ibatsafe_set(chip, chip->safe_current);
+			if (rc) {
+				pr_debug("failed setting ibat_Safe rc=%d\n", rc);
+				return rc;
+			}
+		}
+#endif /* CONFIG_BATTERY_SH */
 		rc = qpnp_chg_tchg_max_set(chip, chip->tchg_mins);
 		if (rc) {
 			pr_debug("failed setting tchg_mins rc=%d\n", rc);
@@ -4962,10 +6080,12 @@ qpnp_chg_hwinit(struct qpnp_chg_chip *chip, u8 subtype,
 			}
 		}
 
+#ifndef CONFIG_BATTERY_SH
 		rc = qpnp_chg_masked_write(chip,
 			chip->usb_chgpth_base + USB_OVP_CTL,
 			USB_VALID_DEB_20MS,
 			USB_VALID_DEB_20MS, 1);
+#endif /* CONFIG_BATTERY_SH */
 
 		rc = qpnp_chg_masked_write(chip,
 			chip->usb_chgpth_base + CHGR_USB_ENUM_T_STOP,
@@ -4982,6 +6102,11 @@ qpnp_chg_hwinit(struct qpnp_chg_chip *chip, u8 subtype,
 			0xFF,
 			0x80, 1);
 
+#ifdef CONFIG_BATTERY_SH
+		chip->iusb_trim = qpnp_chg_iusb_trim_get(chip);
+		pr_info("iusb_trim = 0x%02x\n", chip->iusb_trim);
+#endif /* CONFIG_BATTERY_SH */
+
 		if ((subtype == SMBBP_USB_CHGPTH_SUBTYPE) ||
 			(subtype == SMBCL_USB_CHGPTH_SUBTYPE)) {
 			rc = qpnp_chg_masked_write(chip,
@@ -4994,6 +6119,10 @@ qpnp_chg_hwinit(struct qpnp_chg_chip *chip, u8 subtype,
 
 		break;
 	case SMBB_DC_CHGPTH_SUBTYPE:
+#ifdef CONFIG_BATTERY_SH
+		chip->idc_trim = qpnp_chg_idc_trim_get(chip);
+		pr_info("idc_trim = 0x%02x\n", chip->idc_trim);
+#endif /* CONFIG_BATTERY_SH */
 		break;
 	case SMBB_BOOST_SUBTYPE:
 	case SMBBP_BOOST_SUBTYPE:
@@ -5222,6 +6351,123 @@ qpnp_charger_read_dt_props(struct qpnp_chg_chip *chip)
 	return rc;
 }
 
+#ifdef CONFIG_BATTERY_SH
+#define BB_CLK2_EN_CTL		0x5246
+#define BB_CLK2_CLK_EN		BIT(7)
+int qpnp_bbclk2_control_enable(bool enable)
+{
+	int rc;
+	u8 r_reg, w_reg;
+
+	if (!the_chip)
+	{
+		pr_err("qpnp chg is not initialized\n");
+		return -EINVAL;
+	}
+
+	rc = qpnp_chg_read(the_chip, &r_reg, BB_CLK2_EN_CTL, 1);
+	if (rc)
+	{
+		pr_err("read failed addr = 0x%04x, rc = %d\n", BB_CLK2_EN_CTL, rc);
+		return rc;
+	}
+
+	if (enable)
+	{
+		w_reg = r_reg | BB_CLK2_CLK_EN;
+	}
+	else
+	{
+		w_reg = r_reg & ~BB_CLK2_CLK_EN;
+	}
+	pr_info("BB_CLK2_EN_CTL(%d) = 0x%02x -> 0x%02x\n", enable, r_reg, w_reg);
+
+	if (w_reg != r_reg)
+	{
+		rc = qpnp_chg_write(the_chip, &w_reg, BB_CLK2_EN_CTL, 1);
+		if (rc)
+		{
+			pr_err("write failed addr = 0x%04x, rc = %d\n", BB_CLK2_EN_CTL, rc);
+			return rc;
+		}
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(qpnp_bbclk2_control_enable);
+
+static int debug_bbclk2_reg_get(void *data, u64 *val)
+{
+	int rc;
+	u8 r_reg;
+
+	if (!the_chip)
+	{
+		pr_err("qpnp chg is not initialized\n");
+		return -EINVAL;
+	}
+
+	rc = qpnp_chg_read(the_chip, &r_reg, BB_CLK2_EN_CTL, 1);
+	if (rc)
+	{
+		pr_err("read failed addr = 0x%04x, rc = %d\n", BB_CLK2_EN_CTL, rc);
+		return rc;
+	}
+
+	*val = r_reg;
+
+	return 0;
+}
+
+static int debug_bbclk2_en_set(void *data, u64 val)
+{
+	bool enable = (val) ? true : false;
+
+	return qpnp_bbclk2_control_enable(enable);
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(debugfs_bbclk2_reg_fops, debug_bbclk2_reg_get, NULL, "0x%02llx\n");
+DEFINE_SIMPLE_ATTRIBUTE(debugfs_bbclk2_en_fops, NULL, debug_bbclk2_en_set, "%llu\n");
+
+static struct dentry *debugfs_root;
+
+static void qpnp_chg_init_debugfs(void)
+{
+	pr_err("qpnp_chg_init_debugfs() call\n");
+
+	debugfs_root = debugfs_create_dir("qpnp_chg", NULL);
+	if (!debugfs_root)
+	{
+		pr_warn("qpnp_chg: Failed to create debugfs directory\n");
+		goto error;
+	}
+
+	debugfs_create_file("flash_usb", 0400, debugfs_root, NULL,
+			    &debugfs_flash_usb_fops);
+	debugfs_create_file("flash_boost", 0400, debugfs_root, NULL,
+			    &debugfs_flash_boost_fops);
+	debugfs_create_file("flash_en", 0200, debugfs_root, NULL,
+			    &debugfs_flash_en_fops);
+
+	debugfs_create_file("bbclk2_reg", 0400, debugfs_root, NULL,
+			    &debugfs_bbclk2_reg_fops);
+	debugfs_create_file("bbclk2_en", 0200, debugfs_root, NULL,
+			    &debugfs_bbclk2_en_fops);
+
+error:
+	pr_err("qpnp_chg_init_debugfs() exit\n");
+}
+
+static void qpnp_chg_exit_debugfs(void)
+{
+	if (debugfs_root)
+	{
+		debugfs_remove_recursive(debugfs_root);
+		debugfs_root = NULL;
+	}
+}
+#endif /* CONFIG_BATTERY_SH */
+
 static int __devinit
 qpnp_charger_probe(struct spmi_device *spmi)
 {
@@ -5230,6 +6476,10 @@ qpnp_charger_probe(struct spmi_device *spmi)
 	struct resource *resource;
 	struct spmi_resource *spmi_resource;
 	int rc = 0;
+
+#ifdef CONFIG_BATTERY_SH
+	pr_err("qpnp_charger_probe() call\n");
+#endif /* CONFIG_BATTERY_SH */
 
 	chip = devm_kzalloc(&spmi->dev,
 			sizeof(struct qpnp_chg_chip), GFP_KERNEL);
@@ -5263,6 +6513,9 @@ qpnp_charger_probe(struct spmi_device *spmi)
 			qpnp_chg_batfet_lcl_work);
 	INIT_WORK(&chip->insertion_ocv_work,
 			qpnp_chg_insertion_ocv_work);
+#ifdef CONFIG_BATTERY_SH
+	mutex_init(&chip->flash_control_lock);
+#endif /* CONFIG_BATTERY_SH */
 
 	/* Get all device tree properties */
 	rc = qpnp_charger_read_dt_props(chip);
@@ -5456,13 +6709,29 @@ qpnp_charger_probe(struct spmi_device *spmi)
 		}
 	}
 	dev_set_drvdata(&spmi->dev, chip);
+#ifdef CONFIG_BATTERY_SH
+	chip->sh_control_disable = true;
+	qpnp_chg_setup_control_flags(chip);
+	the_chip = chip;
+
+	/* store trim data */
+	qpnp_chg_store_trim(chip);
+
+	/* disable charger timer */
+	qpnp_chg_tchg_enable(0);
+#endif /* CONFIG_BATTERY_SH */
 	device_init_wakeup(&spmi->dev, 1);
 
 	chip->insertion_ocv_uv = -EINVAL;
 	chip->batt_present = qpnp_chg_is_batt_present(chip);
 	if (chip->bat_if_base) {
+#ifndef CONFIG_BATTERY_SH
 		chip->batt_psy.name = "battery";
 		chip->batt_psy.type = POWER_SUPPLY_TYPE_BATTERY;
+#else  /* CONFIG_BATTERY_SH */
+		chip->batt_psy.name = "q_battery";
+		chip->batt_psy.type = POWER_SUPPLY_TYPE_UNKNOWN;
+#endif /* CONFIG_BATTERY_SH */
 		chip->batt_psy.properties = msm_batt_power_props;
 		chip->batt_psy.num_properties =
 			ARRAY_SIZE(msm_batt_power_props);
@@ -5493,10 +6762,18 @@ qpnp_charger_probe(struct spmi_device *spmi)
 			qpnp_usbin_health_check_work);
 	INIT_WORK(&chip->soc_check_work, qpnp_chg_soc_check_work);
 	INIT_DELAYED_WORK(&chip->aicl_check_work, qpnp_aicl_check_work);
+#ifdef CONFIG_BATTERY_SH
+	INIT_DELAYED_WORK(&chip->flash_check_work, qpnp_flash_check_work);
+	INIT_DELAYED_WORK(&chip->flash_safety_work, qpnp_flash_safety_work);
+#endif /* CONFIG_BATTERY_SH */
 
 	if (chip->dc_chgpth_base) {
 		chip->dc_psy.name = "qpnp-dc";
+#ifndef CONFIG_BATTERY_SH
 		chip->dc_psy.type = POWER_SUPPLY_TYPE_MAINS;
+#else  /* CONFIG_BATTERY_SH */
+		chip->dc_psy.type = POWER_SUPPLY_TYPE_UNKNOWN;
+#endif /* CONFIG_BATTERY_SH */
 		chip->dc_psy.supplied_to = pm_power_supplied_to;
 		chip->dc_psy.num_supplicants = ARRAY_SIZE(pm_power_supplied_to);
 		chip->dc_psy.properties = pm_power_props_mains;
@@ -5559,6 +6836,13 @@ qpnp_charger_probe(struct spmi_device *spmi)
 	qpnp_chg_force_run_on_batt(chip, chip->charging_disabled);
 	qpnp_chg_set_appropriate_vddmax(chip);
 
+#ifdef CONFIG_BATTERY_SH
+	if (chip->sh_control_prdflg)
+	{
+		qpnp_chg_usb_suspend_enable(chip, 1);
+	}
+#endif /* CONFIG_BATTERY_SH */
+
 	if (chip->parallel_ovp_mode) {
 		rc = override_dcin_ilimit(chip, 1);
 		if (rc) {
@@ -5575,7 +6859,9 @@ qpnp_charger_probe(struct spmi_device *spmi)
 
 	qpnp_chg_usb_chg_gone_irq_handler(chip->chg_gone.irq, chip);
 	qpnp_chg_usb_usbin_valid_irq_handler(chip->usbin_valid.irq, chip);
+#ifndef QPNP_CHG_ENABLE_PARA_CONN
 	qpnp_chg_dc_dcin_valid_irq_handler(chip->dcin_valid.irq, chip);
+#endif /* QPNP_CHG_ENABLE_PARA_CONN */
 	power_supply_set_present(chip->usb_psy,
 			qpnp_chg_is_usb_chg_plugged_in(chip));
 
@@ -5586,6 +6872,17 @@ qpnp_charger_probe(struct spmi_device *spmi)
 
 	schedule_delayed_work(&chip->aicl_check_work,
 		msecs_to_jiffies(EOC_CHECK_PERIOD_MS));
+
+#ifndef QPNP_CHG_ENABLE_PARA_CONN
+#ifdef CONFIG_BATTERY_SH
+	if(qpnp_chg_is_dc_chg_plugged_in(chip) == 1)
+	{
+		qpnp_chg_force_run_on_batt(chip, 1);
+		shchg_api_notify_cradle_connected();
+	}
+#endif /* CONFIG_BATTERY_SH */
+#endif /* QPNP_CHG_ENABLE_PARA_CONN */
+
 	pr_info("success chg_dis = %d, bpd = %d, usb = %d, dc = %d b_health = %d batt_present = %d\n",
 			chip->charging_disabled,
 			chip->bpd_detection,
@@ -5593,6 +6890,10 @@ qpnp_charger_probe(struct spmi_device *spmi)
 			qpnp_chg_is_dc_chg_plugged_in(chip),
 			get_prop_batt_present(chip),
 			get_prop_batt_health(chip));
+#ifdef CONFIG_BATTERY_SH
+	qpnp_chg_init_debugfs();
+	pr_err("qpnp_charger_probe() success\n");
+#endif /* CONFIG_BATTERY_SH */
 	return 0;
 
 unregister_dc_psy:
@@ -5604,6 +6905,10 @@ unregister_batt:
 fail_chg_enable:
 	regulator_unregister(chip->otg_vreg.rdev);
 	regulator_unregister(chip->boost_vreg.rdev);
+#ifdef CONFIG_BATTERY_SH
+	the_chip = NULL;
+	pr_err("qpnp_charger_probe() failure\n");
+#endif /* CONFIG_BATTERY_SH */
 	return rc;
 }
 
@@ -5630,12 +6935,22 @@ qpnp_charger_remove(struct spmi_device *spmi)
 	cancel_work_sync(&chip->insertion_ocv_work);
 	cancel_work_sync(&chip->reduce_power_stage_work);
 	alarm_cancel(&chip->reduce_power_stage_alarm);
+#ifdef CONFIG_BATTERY_SH
+	cancel_delayed_work_sync(&chip->flash_check_work);
+	cancel_delayed_work_sync(&chip->flash_safety_work);
+	mutex_destroy(&chip->flash_control_lock);
+#endif /* CONFIG_BATTERY_SH */
 
 	mutex_destroy(&chip->batfet_vreg_lock);
 	mutex_destroy(&chip->jeita_configure_lock);
 
 	regulator_unregister(chip->otg_vreg.rdev);
 	regulator_unregister(chip->boost_vreg.rdev);
+
+#ifdef CONFIG_BATTERY_SH
+	qpnp_chg_exit_debugfs();
+	the_chip = NULL;
+#endif /* CONFIG_BATTERY_SH */
 
 	return 0;
 }
@@ -5696,6 +7011,9 @@ static struct spmi_driver qpnp_charger_driver = {
 int __init
 qpnp_chg_init(void)
 {
+#ifdef CONFIG_BATTERY_SH
+	pr_info("QPNP CHG INIT\n");
+#endif /* CONFIG_BATTERY_SH */
 	return spmi_driver_register(&qpnp_charger_driver);
 }
 module_init(qpnp_chg_init);
@@ -5703,6 +7021,9 @@ module_init(qpnp_chg_init);
 static void __exit
 qpnp_chg_exit(void)
 {
+#ifdef CONFIG_BATTERY_SH
+	pr_info("QPNP CHG EXIT\n");
+#endif /* CONFIG_BATTERY_SH */
 	spmi_driver_unregister(&qpnp_charger_driver);
 }
 module_exit(qpnp_chg_exit);

@@ -17,6 +17,15 @@
 
 #include "power_supply.h"
 
+#ifdef CONFIG_BATTERY_SH
+
+#include <linux/module.h>
+
+static int power_supply_control_leds = 0;
+module_param_named(control_leds, power_supply_control_leds, int, S_IRUSR | S_IWUSR);
+
+#endif /* CONFIG_BATTERY_SH */
+
 /* Battery specific LEDs triggers. */
 
 static void power_supply_update_bat_leds(struct power_supply *psy)
@@ -29,6 +38,22 @@ static void power_supply_update_bat_leds(struct power_supply *psy)
 		return;
 
 	dev_dbg(psy->dev, "%s %d\n", __func__, status.intval);
+
+#ifdef CONFIG_BATTERY_SH
+	if (power_supply_control_leds == 0)
+	{
+		return;
+	}
+	else
+	if (power_supply_control_leds > 0)
+	{
+		if (status.intval != POWER_SUPPLY_STATUS_DISCHARGING)
+		{
+			return;
+		}
+		power_supply_control_leds = 0;
+	}
+#endif /* CONFIG_BATTERY_SH */
 
 	switch (status.intval) {
 	case POWER_SUPPLY_STATUS_FULL:
@@ -124,10 +149,12 @@ static void power_supply_update_gen_leds(struct power_supply *psy)
 
 	dev_dbg(psy->dev, "%s %d\n", __func__, online.intval);
 
+#ifndef CONFIG_BATTERY_SH
 	if (online.intval)
 		led_trigger_event(psy->online_trig, LED_FULL);
 	else
 		led_trigger_event(psy->online_trig, LED_OFF);
+#endif /* CONFIG_BATTERY_SH */
 }
 
 static int power_supply_create_gen_triggers(struct power_supply *psy)
